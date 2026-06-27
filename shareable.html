@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>拆词加词生成器</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            font-size: 2rem;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .columns-wrapper {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 30px;
+        }
+        .column {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            min-width: 250px;
+            flex: 1;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .column-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .column-title { font-weight: 600; color: #333; font-size: 1.1rem; }
+        .column-remove {
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        .column-remove:hover { opacity: 1; }
+        .noun-list {
+            min-height: 100px;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 2px dashed #e0e0e0;
+            border-radius: 8px;
+            transition: border-color 0.2s;
+        }
+        .noun-list:hover { border-color: #667eea; }
+        .noun-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: #f5f5f5;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            transition: background-color 0.2s;
+        }
+        .noun-item:hover { background: #e8e8e8; }
+        .noun-text { flex: 1; font-size: 0.9rem; color: #333; }
+        .noun-remove {
+            background: none;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px;
+            transition: color 0.2s;
+        }
+        .noun-remove:hover { color: #ff6b6b; }
+        .add-noun-input { display: flex; gap: 8px; }
+        .noun-input {
+            flex: 1;
+            padding: 10px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: border-color 0.2s;
+            outline: none;
+        }
+        .noun-input:focus { border-color: #667eea; }
+        .add-noun-btn, .add-column-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .add-noun-btn { background: #667eea; color: white; }
+        .add-noun-btn:hover { background: #5a6fd6; }
+        .add-column-btn { background: #4ecdc4; color: white; margin-bottom: 30px; }
+        .add-column-btn:hover { background: #44b8b0; }
+        .add-column-btn:disabled { background: #ccc; cursor: not-allowed; }
+        .manual-wrapper { margin-top: 20px; }
+        .output-section {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .output-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            display: block;
+        }
+        .output-textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            resize: vertical;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .output-textarea:focus { border-color: #667eea; }
+        .output-buttons { display: flex; gap: 10px; margin-top: 10px; }
+        .copy-btn {
+            background: #95e1d3;
+            color: #333;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background-color 0.2s;
+        }
+        .copy-btn:hover { background: #86d1c4; }
+        .copy-btn.copied { background: #26de81; color: white; }
+        .export-excel-btn {
+            background: #f39c12;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            transition: all 0.2s;
+        }
+        .export-excel-btn:hover { background: #e67e22; }
+        @media (max-width: 768px) {
+            .columns-wrapper { flex-direction: column; }
+            .column { min-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>拆词加词生成器</h1>
+        <button class="add-column-btn" id="addColumnBtn">+ 新增一列</button>
+        <div class="columns-wrapper" id="columnsWrapper">
+            <div class="column" data-column-index="0">
+                <div class="column-header">
+                    <span class="column-title">第 1 列</span>
+                </div>
+                <div class="noun-list" id="nounList0"></div>
+                <div class="add-noun-input">
+                    <input type="text" class="noun-input" id="nounInput0" placeholder="输入名词">
+                    <button class="add-noun-btn" data-column="0">添加</button>
+                </div>
+            </div>
+            <div class="column" data-column-index="1">
+                <div class="column-header">
+                    <span class="column-title">第 2 列</span>
+                    <button class="column-remove" onclick="removeColumn(this)">×</button>
+                </div>
+                <div class="noun-list" id="nounList1"></div>
+                <div class="add-noun-input">
+                    <input type="text" class="noun-input" id="nounInput1" placeholder="输入名词">
+                    <button class="add-noun-btn" data-column="1">添加</button>
+                </div>
+            </div>
+        </div>
+        <div class="manual-wrapper">
+            <div class="column" id="manualColumn">
+                <div class="column-header">
+                    <span class="column-title">单独添加</span>
+                </div>
+                <div class="noun-list" id="manualList"></div>
+                <div class="add-noun-input">
+                    <input type="text" class="noun-input" id="manualKeywordInput" placeholder="输入关键词组">
+                    <button class="add-noun-btn" id="manualAddBtn">添加</button>
+                </div>
+            </div>
+        </div>
+        <div class="output-section">
+            <span class="output-label">导出结果：</span>
+            <textarea class="output-textarea" id="outputTextarea" readonly></textarea>
+            <div class="output-buttons">
+                <button class="copy-btn" id="copyBtn">复制结果并跳转至业务安全平台</button>
+                <button class="export-excel-btn" id="exportExcelBtn">导出文件并跳转至IMC加词</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const MAX_COLUMNS = 5;
+        let columnCount = 2;
+        let manualKeywords = [];
+
+        function addManualKeyword() {
+            const input = document.getElementById('manualKeywordInput');
+            const keyword = input.value.trim();
+            if (!keyword) return;
+            manualKeywords.push(keyword);
+            const list = document.getElementById('manualList');
+            const item = document.createElement('div');
+            item.className = 'noun-item';
+            item.innerHTML = `<span class="noun-text">${keyword}</span><button class="noun-remove" onclick="removeManualKeyword(this, '${keyword}')">×</button>`;
+            list.appendChild(item);
+            input.value = '';
+            input.focus();
+            updateOutput();
+        }
+
+        function removeManualKeyword(btn, keyword) {
+            btn.parentElement.remove();
+            manualKeywords = manualKeywords.filter(k => k !== keyword);
+            updateOutput();
+        }
+
+        function updateOutput() {
+            const columns = document.querySelectorAll('.column:not(#manualColumn)');
+            const nounLists = [];
+            columns.forEach(col => {
+                const items = col.querySelectorAll('.noun-item');
+                const nouns = Array.from(items).map(item => item.querySelector('.noun-text').textContent);
+                if (nouns.length > 0) nounLists.push(nouns);
+            });
+            let result = [];
+            if (manualKeywords.length > 0) result = [...manualKeywords];
+            if (nounLists.length > 0) {
+                const combinations = cartesianProduct(nounLists);
+                const combinationStrings = combinations.map(row => row.join(','));
+                result = [...result, ...combinationStrings];
+            }
+            document.getElementById('outputTextarea').value = result.join('\n');
+        }
+
+        function addNoun(columnIndex) {
+            const input = document.getElementById(`nounInput${columnIndex}`);
+            const noun = input.value.trim();
+            if (!noun) return;
+            const list = document.getElementById(`nounList${columnIndex}`);
+            const item = document.createElement('div');
+            item.className = 'noun-item';
+            item.innerHTML = `<span class="noun-text">${noun}</span><button class="noun-remove" onclick="removeNoun(this)">×</button>`;
+            list.appendChild(item);
+            input.value = '';
+            input.focus();
+            updateOutput();
+        }
+
+        function removeNoun(btn) {
+            btn.parentElement.remove();
+            updateOutput();
+        }
+
+        function addColumn() {
+            if (columnCount >= MAX_COLUMNS) return;
+            columnCount++;
+            const wrapper = document.getElementById('columnsWrapper');
+            const column = document.createElement('div');
+            column.className = 'column';
+            column.dataset.columnIndex = columnCount - 1;
+            column.innerHTML = `<div class="column-header"><span class="column-title">第 ${columnCount} 列</span><button class="column-remove" onclick="removeColumn(this)">×</button></div><div class="noun-list" id="nounList${columnCount - 1}"></div><div class="add-noun-input"><input type="text" class="noun-input" id="nounInput${columnCount - 1}" placeholder="输入名词"><button class="add-noun-btn" data-column="${columnCount - 1}">添加</button></div>`;
+            wrapper.appendChild(column);
+            if (columnCount >= MAX_COLUMNS) document.getElementById('addColumnBtn').disabled = true;
+        }
+
+        function removeColumn(btn) {
+            btn.parentElement.parentElement.remove();
+            columnCount--;
+            document.getElementById('addColumnBtn').disabled = false;
+            const columns = document.querySelectorAll('.column:not(#manualColumn)');
+            columns.forEach((col, index) => {
+                col.dataset.columnIndex = index;
+                col.querySelector('.column-title').textContent = `第 ${index + 1} 列`;
+            });
+            updateOutput();
+        }
+
+        function cartesianProduct(arrays) {
+            return arrays.reduce((acc, arr) => acc.flatMap(a => arr.map(b => [...a, b])), [[]]);
+        }
+
+        function copyResult() {
+            const textarea = document.getElementById('outputTextarea');
+            if (!textarea.value) return;
+            navigator.clipboard.writeText(textarea.value).then(() => {
+                const btn = document.getElementById('copyBtn');
+                btn.textContent = '已复制';
+                btn.classList.add('copied');
+                setTimeout(() => { btn.textContent = '复制结果并跳转至业务安全平台'; btn.classList.remove('copied'); }, 2000);
+                window.open('https://safe.bytedance.net/strategy/antidirt2/tag_list/detail/6180', '_blank');
+            });
+        }
+
+        function exportToExcel() {
+            const columns = document.querySelectorAll('.column:not(#manualColumn)');
+            const nounLists = [];
+            columns.forEach(col => {
+                const items = col.querySelectorAll('.noun-item');
+                const nouns = Array.from(items).map(item => item.querySelector('.noun-text').textContent);
+                if (nouns.length > 0) nounLists.push(nouns);
+            });
+            if (manualKeywords.length === 0 && nounLists.length === 0) {
+                alert('至少需要添加一个关键词或一列名词');
+                return;
+            }
+            const expireDate = new Date();
+            expireDate.setMonth(expireDate.getMonth() + 1);
+            const year = expireDate.getFullYear();
+            const month = String(expireDate.getMonth() + 1).padStart(2, '0');
+            const day = String(expireDate.getDate()).padStart(2, '0');
+            const hours = String(expireDate.getHours()).padStart(2, '0');
+            const minutes = String(expireDate.getMinutes()).padStart(2, '0');
+            const seconds = String(expireDate.getSeconds()).padStart(2, '0');
+            const expireTime = `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
+            let csv = '\uFEFFstop_keyword,expire_time\n';
+            if (manualKeywords.length > 0) {
+                manualKeywords.forEach(keyword => {
+                    csv += `"${keyword.replace(/"/g, '""')}",${expireTime}\n`;
+                });
+            }
+            if (nounLists.length > 0) {
+                const result = cartesianProduct(nounLists);
+                result.forEach(row => {
+                    csv += `"${row.join(',').replace(/"/g, '""')}",${expireTime}\n`;
+                });
+            }
+            const blob = new Blob([csv], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '拆词表.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            window.open('https://bee.bytedance.net/1533/combine-imc/16410/data', '_blank');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('addColumnBtn').addEventListener('click', addColumn);
+            document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
+            document.getElementById('copyBtn').addEventListener('click', copyResult);
+            document.getElementById('manualAddBtn').addEventListener('click', addManualKeyword);
+            document.addEventListener('click', (e) => {
+                const btn = e.target.closest('.add-noun-btn');
+                if (btn && btn.id !== 'manualAddBtn') {
+                    const columnIndex = parseInt(btn.dataset.column);
+                    addNoun(columnIndex);
+                }
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.target.classList.contains('noun-input') && e.key === 'Enter') {
+                    if (e.target.id === 'manualKeywordInput') addManualKeyword();
+                    else {
+                        const columnIndex = parseInt(e.target.id.replace('nounInput', ''));
+                        addNoun(columnIndex);
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
