@@ -175,6 +175,7 @@
 <body>
     <div class="container">
         <h1>拆词加词生成器</h1>
+        <h4>v1.0.0</h4>
         <button class="add-column-btn" id="addColumnBtn">+ 新增一列</button>
         <div class="columns-wrapper" id="columnsWrapper">
             <div class="column" data-column-index="0">
@@ -202,7 +203,7 @@
         <div class="manual-wrapper">
             <div class="column" id="manualColumn">
                 <div class="column-header">
-                    <span class="column-title">单独添加</span>
+                    <span class="column-title">单独添加词组</span>
                 </div>
                 <div class="noun-list" id="manualList"></div>
                 <div class="add-noun-input">
@@ -212,10 +213,10 @@
             </div>
         </div>
         <div class="output-section">
-            <span class="output-label">导出结果：</span>
+            <span class="output-label">导出结果</span>
             <textarea class="output-textarea" id="outputTextarea" readonly></textarea>
             <div class="output-buttons">
-                <button class="copy-btn" id="copyBtn">复制结果并跳转至业务安全平台</button>
+                <button class="copy-btn" id="copyBtn">复制结果并跳转至业务安全平台加词</button>
                 <button class="export-excel-btn" id="exportExcelBtn">导出文件并跳转至IMC加词</button>
             </div>
         </div>
