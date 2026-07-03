@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>敏感词助手</title>
+    <title>拆词加词生成器</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -116,6 +116,15 @@
         .imc-rescan-btn { background: #3a359c; color: white; margin-bottom: 30px; }
         .imc-rescan-btn:hover { background: #13706a; }
         .imc-rescan-btn:disabled { background: #6d5f5f; cursor: not-allowed; }
+        .top-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+        .top-actions .add-column-btn,
+        .top-actions .imc-rescan-btn { margin-bottom: 0; }
         .manual-wrapper { margin-top: 20px; }
         .output-section {
             background: white;
@@ -170,6 +179,7 @@
         }
         .export-excel-btn:hover { background: #e67e22; }
         @media (max-width: 768px) {
+            .top-actions { flex-direction: column; align-items: stretch; }
             .columns-wrapper { flex-direction: column; }
             .column { min-width: 100%; }
         }
@@ -177,9 +187,11 @@
 </head>
 <body>
     <div class="container">
-        <h1>敏感词助手</h1>
-        <button class="add-column-btn" id="addColumnBtn">+ 新增一列</button>
-        <button class="add-column-btn imc-rescan-btn" id="imcRescanBtn">IMC回扫</button>
+        <h1>拆词加词生成器</h1>
+        <div class="top-actions">
+            <button class="add-column-btn" id="addColumnBtn">+ 新增一列</button>
+            <button class="add-column-btn imc-rescan-btn" id="imcRescanBtn">IMC回扫</button>
+        </div>
         <div class="columns-wrapper" id="columnsWrapper">
             <div class="column" data-column-index="0">
                 <div class="column-header">
