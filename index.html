@@ -123,6 +123,12 @@
             gap: 10px;
             margin-bottom: 30px;
         }
+        .top-actions-right {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
         .top-actions .add-column-btn,
         .top-actions .imc-rescan-btn { margin-bottom: 0; }
         .manual-wrapper { margin-top: 20px; }
@@ -190,7 +196,10 @@
         <h1>拆词加词生成器</h1>
         <div class="top-actions">
             <button class="add-column-btn" id="addColumnBtn">+ 新增一列</button>
-            <button class="add-column-btn imc-rescan-btn" id="imcRescanBtn">IMC回扫</button>
+            <div class="top-actions-right">
+                <button class="add-column-btn imc-rescan-btn" id="imcRescanBtn">IMC-GID回扫</button>
+                <button class="add-column-btn imc-rescan-btn" id="imcSRescanBtn">IMC-素材回扫</button>
+            </div>
         </div>
         <div class="columns-wrapper" id="columnsWrapper">
             <div class="column" data-column-index="0">
@@ -398,12 +407,24 @@
             url.searchParams.set('pageNum', '1');
             window.open(url.toString(), '_blank');
         }
-
+        function openImcSRescan() {
+            const now = new Date();
+            const startMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0).getTime();
+            const endMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0).getTime() - 1;
+            const url = new URL('https://imc.bytedance.net/tools/push-intercept/material-intercept');
+            url.searchParams.set('curAppId', '1128');
+            url.searchParams.set('isNewTask', '0');
+            url.searchParams.set('startCreateTime', String(startMs));
+            url.searchParams.set('endCreateTime', String(endMs));
+            url.searchParams.set('pageNum', '1');
+            window.open(url.toString(), '_blank');
+        }
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('addColumnBtn').addEventListener('click', addColumn);
             document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
             document.getElementById('copyBtn').addEventListener('click', copyResult);
             document.getElementById('imcRescanBtn').addEventListener('click', openImcRescan);
+            document.getElementById('imcSRescanBtn').addEventListener('click', openImcSRescan);
             document.getElementById('manualAddBtn').addEventListener('click', addManualKeyword);
             document.addEventListener('click', (e) => {
                 const btn = e.target.closest('.add-noun-btn');
