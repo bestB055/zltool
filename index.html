@@ -159,17 +159,25 @@
             outline: none;
             transition: border-color 0.2s;
         }
-或词组        .output-textarea:focus { border-color: #667eea; }
+        .output-textarea:focus { border-color: #667eea; }
         .output-buttons { display: flex; gap: 10px; margin-top: 10px; align-items: center; }
         .copy-btn {
             background: #3F51B5;
             color: #ffffff;
             border: none;
-            padding: 8px 16px;
+            padding: 0 18px;
+            height: 38px;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 0.85rem;
+            font-size: 0.9rem;
             transition: background-color 0.2s;
+        }
+        .copy-btn, .export-excel-btn, .danger-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            line-height: 1;
         }
         .copy-btn:hover { background: #2d3a85; }
         .copy-btn.copied { background: #2e3b83; color: white; }
@@ -187,11 +195,11 @@
             background: #026FFF;
             color: white;
             border: none;
-            padding: 8px 16px;
+            padding: 0 18px;
+            height: 38px;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 0.85rem;
-            line-height: 1.5;
+            font-size: 0.9rem;
             transition: all 0.2s;
         }
         .export-excel-btn:hover { background: #e67e22; }
@@ -293,14 +301,16 @@
             align-items: center;
             flex-wrap: wrap;
         }
+        .modal-actions .output-buttons { margin-top: 0; }
         .danger-btn {
             background: #ff6b6b;
             color: white;
             border: none;
-            padding: 8px 16px;
+            padding: 0 18px;
+            height: 38px;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 0.85rem;
+            font-size: 0.9rem;
         }
         .danger-btn:hover { background: #ff5252; }
         .result-add-btn {
