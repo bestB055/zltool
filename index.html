@@ -113,6 +113,8 @@
         .add-column-btn { background: #4ecdc4; color: white; margin-bottom: 30px; }
         .add-column-btn:hover { background: #44b8b0; }
         .add-column-btn:disabled { background: #ccc; cursor: not-allowed; }
+        .feishu-sheet-btn { background: #39C14F; color: white; margin-bottom: 30px; }
+        .feishu-sheet-btn:hover { background: #2fa342; }
         .imc-rescan-btn { background: #3a359c; color: white; margin-bottom: 30px; }
         .imc-rescan-btn:hover { background: #13706a; }
         .imc-rescan-btn:disabled { background: #6d5f5f; cursor: not-allowed; }
@@ -130,7 +132,8 @@
             flex-wrap: wrap;
         }
         .top-actions .add-column-btn,
-        .top-actions .imc-rescan-btn { margin-bottom: 0; }
+        .top-actions .imc-rescan-btn,
+        .top-actions .feishu-sheet-btn { margin-bottom: 0; }
         .manual-wrapper { margin-top: 20px; }
         .output-section {
             background: white;
@@ -344,6 +347,7 @@
 
 
             <div class="top-actions-right">
+                <button class="add-column-btn feishu-sheet-btn" id="feishuSheetBtn">飞书表格落表</button>
                 <button class="add-column-btn imc-rescan-btn" id="imcRescanBtn">IMC-GID回扫</button>
                 <button class="add-column-btn imc-rescan-btn" id="imcSRescanBtn">IMC-素材回扫</button>
             </div>
@@ -639,6 +643,10 @@
             window.open('https://bee.bytedance.net/1533/combine-imc/16410/data', '_blank');
         }
 
+        function openFeishuSheet() {
+            window.open('https://bytedance.larkoffice.com/sheets/X3lzs3LKOhsJ1Bth11Cc7wXvndf', '_blank');
+        }
+
         function openImcRescan() {
             const now = new Date();
             const startMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0).getTime();
@@ -667,6 +675,7 @@
             document.getElementById('addColumnBtn').addEventListener('click', addColumn);
             document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
             document.getElementById('copyBtn').addEventListener('click', copyResult);
+            document.getElementById('feishuSheetBtn').addEventListener('click', openFeishuSheet);
             document.getElementById('imcRescanBtn').addEventListener('click', openImcRescan);
             document.getElementById('imcSRescanBtn').addEventListener('click', openImcSRescan);
             document.getElementById('manualAddBtn').addEventListener('click', addManualKeyword);
