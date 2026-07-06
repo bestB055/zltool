@@ -172,6 +172,8 @@
         }
         .copy-btn:hover { background: #86d1c4; }
         .copy-btn.copied { background: #26de81; color: white; }
+        .generate-btn { background: #667eea; color: white; }
+        .generate-btn:hover { background: #5a6fd6; }
         .export-excel-btn {
             background: #f39c12;
             color: white;
@@ -184,6 +186,127 @@
             transition: all 0.2s;
         }
         .export-excel-btn:hover { background: #e67e22; }
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.6));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;   
+            transition: opacity 180ms ease, visibility 180ms ease;
+        }
+        .modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+        .modal {
+            width: min(900px, 100%);
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            max-height: 85vh;
+            transform: translateY(10px) scale(0.98);
+            opacity: 0;
+            transition: transform 180ms ease, opacity 180ms ease;
+        }
+        .modal-overlay.show .modal { transform: translateY(0) scale(1); opacity: 1; }
+        .modal-header {
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #eee;
+        }
+        .modal-title { font-weight: 600; color: #333; }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #666;
+            padding: 6px 10px;
+            border-radius: 6px;
+        }
+        .modal-close:hover { background: #f2f2f2; }
+        .modal-body {
+            padding: 16px;
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .result-list {
+            border: 2px dashed #e0e0e0;
+            border-radius: 8px;
+            padding: 10px;
+            min-height: 180px;
+        }
+        .result-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            background: #f7f7f7;
+            margin-bottom: 8px;
+        }
+        .result-row:last-child { margin-bottom: 0; }
+        .result-checkbox { width: 16px; height: 16px; }
+        .result-text {
+            flex: 1;
+            font-size: 0.92rem;
+            color: #333;
+            cursor: pointer;
+            word-break: break-word;
+        }
+        .result-input {
+            flex: 1;
+            padding: 8px 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 0.92rem;
+            outline: none;
+        }
+        .result-input:focus { border-color: #667eea; }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .danger-btn {
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .danger-btn:hover { background: #ff5252; }
+        .result-add-btn {
+            width: 100%;
+            border: 2px dashed #cfcfcf;
+            background: #fff;
+            border-radius: 8px;
+            padding: 10px 12px;
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 1;
+            color: #667eea;
+            transition: border-color 0.2s, background-color 0.2s;
+        }
+        .result-add-btn:hover { border-color: #667eea; background: #f6f7ff; }
         @media (max-width: 768px) {
             .top-actions { flex-direction: column; align-items: stretch; }
             .columns-wrapper { flex-direction: column; }
@@ -241,9 +364,28 @@
             <textarea class="output-textarea" id="outputTextarea" readonly></textarea>
             <div class="output-buttons">
                 
-                <button class="copy-btn" id="copyBtn">复制结果并跳转至业务安全平台</button>
-                <button class="export-excel-btn" id="exportExcelBtn">导出文件并跳转至IMC加词</button>
+                <button class="copy-btn generate-btn" id="generateBtn">生成结果</button>
             </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="resultModal">
+        <div class="modal" role="dialog" aria-modal="true">
+            <div class="modal-header">
+                <div class="modal-title">生成结果</div>
+                <button class="modal-close" id="resultModalCloseBtn">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="result-list" id="resultList"></div>
+                <div class="modal-actions">
+                    <button class="danger-btn" id="deleteSelectedBtn">删除选中</button>
+                    <div class="output-buttons">
+                        <button class="copy-btn" id="copyBtn">复制结果并跳转至业务安全平台</button>
+                        <button class="export-excel-btn" id="exportExcelBtn">导出文件并跳转至IMC加词</button>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -251,6 +393,7 @@
         const MAX_COLUMNS = 5;
         let columnCount = 2;
         let manualKeywords = [];
+        let modalLines = [];
 
         function addManualKeyword() {
             const input = document.getElementById('manualKeywordInput');
@@ -338,6 +481,94 @@
             return arrays.reduce((acc, arr) => acc.flatMap(a => arr.map(b => [...a, b])), [[]]);
         }
 
+        function getOutputLines() {
+            const textarea = document.getElementById('outputTextarea');
+            return textarea.value.split('\n').map(s => s.trim()).filter(Boolean);
+        }
+
+        function setOutputLines(lines) {
+            document.getElementById('outputTextarea').value = lines.join('\n');
+        }
+
+        function renderModalList() {
+            const container = document.getElementById('resultList');
+            container.innerHTML = '';
+            modalLines.forEach((line, index) => {
+                const row = document.createElement('div');
+                row.className = 'result-row';
+                row.innerHTML = `
+                    <input class="result-checkbox" type="checkbox" data-index="${index}">
+                    <span class="result-text" data-index="${index}"></span>
+                `;
+                row.querySelector('.result-text').textContent = line;
+                container.appendChild(row);
+            });
+
+            const addBtn = document.createElement('button');
+            addBtn.type = 'button';
+            addBtn.className = 'result-add-btn';
+            addBtn.id = 'resultAddBtn';
+            addBtn.textContent = '+';
+            container.appendChild(addBtn);
+        }
+
+        function openResultModal() {
+            modalLines = getOutputLines();
+            renderModalList();
+            document.getElementById('resultModal').classList.add('show');
+        }
+
+        function closeResultModal() {
+            document.getElementById('resultModal').classList.remove('show');
+        }
+
+        function deleteSelectedLines() {
+            const checks = Array.from(document.querySelectorAll('#resultList .result-checkbox:checked'));
+            if (checks.length === 0) return;
+            const indices = new Set(checks.map(c => Number(c.dataset.index)));
+            modalLines = modalLines.filter((_, i) => !indices.has(i));
+            setOutputLines(modalLines);
+            renderModalList();
+        }
+
+        function startEditLine(index) {
+            const rows = document.querySelectorAll('#resultList .result-row');
+            const row = rows[index];
+            if (!row) return;
+            const textEl = row.querySelector('.result-text');
+            if (!textEl) return;
+            const current = modalLines[index] ?? '';
+            const input = document.createElement('input');
+            input.className = 'result-input';
+            input.value = current;
+            textEl.replaceWith(input);
+            input.focus();
+            input.setSelectionRange(input.value.length, input.value.length);
+
+            const commit = () => {
+                const value = input.value.trim();
+                if (!value) {
+                    modalLines.splice(index, 1);
+                } else {
+                    modalLines[index] = value;
+                }
+                setOutputLines(modalLines);
+                renderModalList();
+            };
+
+            input.addEventListener('blur', commit, { once: true });
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') commit();
+                if (e.key === 'Escape') renderModalList();
+            });
+        }
+
+        function addTempLine() {
+            modalLines.push('');
+            renderModalList();
+            startEditLine(modalLines.length - 1);
+        }
+
         function copyResult() {
             const textarea = document.getElementById('outputTextarea');
             if (!textarea.value) return;
@@ -351,15 +582,9 @@
         }
 
         function exportToExcel() {
-            const columns = document.querySelectorAll('.column:not(#manualColumn)');
-            const nounLists = [];
-            columns.forEach(col => {
-                const items = col.querySelectorAll('.noun-item');
-                const nouns = Array.from(items).map(item => item.querySelector('.noun-text').textContent);
-                if (nouns.length > 0) nounLists.push(nouns);
-            });
-            if (manualKeywords.length === 0 && nounLists.length === 0) {
-                alert('至少需要添加一个关键词或一列名词');
+            const lines = getOutputLines();
+            if (lines.length === 0) {
+                alert('导出结果为空');
                 return;
             }
             const expireDate = new Date();
@@ -372,17 +597,9 @@
             const seconds = String(expireDate.getSeconds()).padStart(2, '0');
             const expireTime = `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
             let csv = '\uFEFFstop_keyword,expire_time\n';
-            if (manualKeywords.length > 0) {
-                manualKeywords.forEach(keyword => {
-                    csv += `"${keyword.replace(/"/g, '""')}",${expireTime}\n`;
-                });
-            }
-            if (nounLists.length > 0) {
-                const result = cartesianProduct(nounLists);
-                result.forEach(row => {
-                    csv += `"${row.join(',').replace(/"/g, '""')}",${expireTime}\n`;
-                });
-            }
+            lines.forEach(keyword => {
+                csv += `"${keyword.replace(/"/g, '""')}",${expireTime}\n`;
+            });
             const blob = new Blob([csv], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -426,6 +643,25 @@
             document.getElementById('imcRescanBtn').addEventListener('click', openImcRescan);
             document.getElementById('imcSRescanBtn').addEventListener('click', openImcSRescan);
             document.getElementById('manualAddBtn').addEventListener('click', addManualKeyword);
+            document.getElementById('generateBtn').addEventListener('click', openResultModal);
+            document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelectedLines);
+            document.getElementById('resultModalCloseBtn').addEventListener('click', closeResultModal);
+            document.getElementById('resultModal').addEventListener('click', (e) => {
+                if (e.target && e.target.id === 'resultModal') closeResultModal();
+            });
+            document.getElementById('resultList').addEventListener('click', (e) => {
+                const addBtn = e.target.closest('#resultAddBtn');
+                if (addBtn) {
+                    addTempLine();
+                    return;
+                }
+                const el = e.target.closest('.result-text');
+                if (!el) return;
+                startEditLine(Number(el.dataset.index));
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closeResultModal();
+            });
             document.addEventListener('click', (e) => {
                 const btn = e.target.closest('.add-noun-btn');
                 if (btn && btn.id !== 'manualAddBtn') {
