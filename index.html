@@ -141,6 +141,7 @@
         }
         .output-label {
             font-weight: 600;
+            font-size: 1.1rem;
             color: #333;
             margin-bottom: 15px;
             display: block;
@@ -158,11 +159,11 @@
             outline: none;
             transition: border-color 0.2s;
         }
-        .output-textarea:focus { border-color: #667eea; }
-        .output-buttons { display: flex; gap: 10px; margin-top: 10px; }
+或词组        .output-textarea:focus { border-color: #667eea; }
+        .output-buttons { display: flex; gap: 10px; margin-top: 10px; align-items: center; }
         .copy-btn {
-            background: #95e1d3;
-            color: #333;
+            background: #3F51B5;
+            color: #ffffff;
             border: none;
             padding: 8px 16px;
             border-radius: 6px;
@@ -170,12 +171,20 @@
             font-size: 0.85rem;
             transition: background-color 0.2s;
         }
-        .copy-btn:hover { background: #86d1c4; }
-        .copy-btn.copied { background: #26de81; color: white; }
+        .copy-btn:hover { background: #2d3a85; }
+        .copy-btn.copied { background: #2e3b83; color: white; }
         .generate-btn { background: #667eea; color: white; }
         .generate-btn:hover { background: #5a6fd6; }
+        .generate-hover { display: flex; align-items: center; gap: 10px; }
+        .generate-hint {
+            display: none;
+            color: #505050;
+            font-size: 0.85rem;
+            line-height: 1;
+        }
+        .generate-hover:hover .generate-hint { display: inline-block; }
         .export-excel-btn {
-            background: #f39c12;
+            background: #026FFF;
             color: white;
             border: none;
             padding: 8px 16px;
@@ -318,7 +327,9 @@
     <div class="container">
         <h1>拆词加词生成器</h1>
         <div class="top-actions">
-            <button class="add-column-btn" id="addColumnBtn">+ 新增一列</button>
+            <button class="add-column-btn" id="addColumnBtn">点击新增一列</button>
+
+
             <div class="top-actions-right">
                 <button class="add-column-btn imc-rescan-btn" id="imcRescanBtn">IMC-GID回扫</button>
                 <button class="add-column-btn imc-rescan-btn" id="imcSRescanBtn">IMC-素材回扫</button>
@@ -331,7 +342,7 @@
                 </div>
                 <div class="noun-list" id="nounList0"></div>
                 <div class="add-noun-input">
-                    <input type="text" class="noun-input" id="nounInput0" placeholder="输入名词">
+                    <input type="text" class="noun-input" id="nounInput0" placeholder="输入需要排列组合的单个词语或词组后，回车或点击添加按钮">
                     <button class="add-noun-btn" data-column="0">添加</button>
                 </div>
             </div>
@@ -342,7 +353,7 @@
                 </div>
                 <div class="noun-list" id="nounList1"></div>
                 <div class="add-noun-input">
-                    <input type="text" class="noun-input" id="nounInput1" placeholder="输入名词">
+                    <input type="text" class="noun-input" id="nounInput1" placeholder="输入需要排列组合的单个词语或词组后，回车或点击添加按钮">
                     <button class="add-noun-btn" data-column="1">添加</button>
                 </div>
             </div>
@@ -354,17 +365,20 @@
                 </div>
                 <div class="noun-list" id="manualList"></div>
                 <div class="add-noun-input">
-                    <input type="text" class="noun-input" id="manualKeywordInput" placeholder="输入关键词组">
+                    <input type="text" class="noun-input" id="manualKeywordInput" placeholder="输入需要单独添加的词语或词组">
                     <button class="add-noun-btn" id="manualAddBtn">添加</button>
                 </div>
             </div>
         </div>
         <div class="output-section">
-            <span class="output-label">导出结果：</span>
+            <span class="output-label">词组预览</span>
             <textarea class="output-textarea" id="outputTextarea" readonly></textarea>
             <div class="output-buttons">
                 
-                <button class="copy-btn generate-btn" id="generateBtn">生成结果</button>
+                <div class="generate-hover">
+                    <button class="copy-btn generate-btn" id="generateBtn">编辑并导出结果</button>
+                    <span class="generate-hint">（进入确认页面，导出前可对以上结果进行调整删改）</span>
+                </div>
             </div>
         </div>
     </div>
