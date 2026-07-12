@@ -3,16 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>拆词加词助手</title>
+    <title>加词组合生成器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
         }
-        .container { max-width: 1200px; margin: 0 auto; }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
         h1 {
             text-align: center;
             color: white;
@@ -20,12 +31,14 @@
             font-size: 2rem;
             text-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
+        
         .columns-wrapper {
             display: flex;
             gap: 20px;
             flex-wrap: wrap;
             margin-bottom: 30px;
         }
+        
         .column {
             background: white;
             border-radius: 12px;
@@ -34,13 +47,20 @@
             flex: 1;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
+        
         .column-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 15px;
         }
-        .column-title { font-weight: 600; color: #333; font-size: 1.1rem; }
+        
+        .column-title {
+            font-weight: 600;
+            color: #333;
+            font-size: 1.1rem;
+        }
+        
         .column-remove {
             background: #ff6b6b;
             color: white;
@@ -56,7 +76,11 @@
             opacity: 0.7;
             transition: opacity 0.2s;
         }
-        .column-remove:hover { opacity: 1; }
+        
+        .column-remove:hover {
+            opacity: 1;
+        }
+        
         .noun-list {
             min-height: 100px;
             margin-bottom: 15px;
@@ -65,7 +89,11 @@
             border-radius: 8px;
             transition: border-color 0.2s;
         }
-        .noun-list:hover { border-color: #667eea; }
+        
+        .noun-list:hover {
+            border-color: #667eea;
+        }
+        
         .noun-item {
             display: flex;
             justify-content: space-between;
@@ -76,8 +104,17 @@
             margin-bottom: 8px;
             transition: background-color 0.2s;
         }
-        .noun-item:hover { background: #e8e8e8; }
-        .noun-text { flex: 1; font-size: 0.9rem; color: #333; }
+        
+        .noun-item:hover {
+            background: #e8e8e8;
+        }
+        
+        .noun-text {
+            flex: 1;
+            font-size: 0.9rem;
+            color: #333;
+        }
+        
         .noun-remove {
             background: none;
             border: none;
@@ -87,8 +124,16 @@
             padding: 4px;
             transition: color 0.2s;
         }
-        .noun-remove:hover { color: #ff6b6b; }
-        .add-noun-input { display: flex; gap: 8px; }
+        
+        .noun-remove:hover {
+            color: #ff6b6b;
+        }
+        
+        .add-noun-input {
+            display: flex;
+            gap: 8px;
+        }
+        
         .noun-input {
             flex: 1;
             padding: 10px 12px;
@@ -98,8 +143,12 @@
             transition: border-color 0.2s;
             outline: none;
         }
-        .noun-input:focus { border-color: #667eea; }
-        .add-noun-btn, .add-column-btn {
+        
+        .noun-input:focus {
+            border-color: #667eea;
+        }
+        
+        .add-noun-btn, .add-column-btn, .export-btn {
             padding: 10px 20px;
             border: none;
             border-radius: 6px;
@@ -108,33 +157,44 @@
             font-weight: 500;
             transition: all 0.2s;
         }
-        .add-noun-btn { background: #667eea; color: white; }
-        .add-noun-btn:hover { background: #5a6fd6; }
-        .add-column-btn { background: #4ecdc4; color: white; margin-bottom: 30px; }
-        .add-column-btn:hover { background: #44b8b0; }
-        .add-column-btn:disabled { background: #ccc; cursor: not-allowed; }
-        .feishu-sheet-btn { background: #39C14F; color: white; margin-bottom: 30px; }
-        .feishu-sheet-btn:hover { background: #2fa342; }
-        .imc-rescan-btn { background: #3a359c; color: white; margin-bottom: 30px; }
-        .imc-rescan-btn:hover { background: #13706a; }
-        .imc-rescan-btn:disabled { background: #6d5f5f; cursor: not-allowed; }
-        .top-actions {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 10px;
+        
+        .add-noun-btn {
+            background: #667eea;
+            color: white;
+        }
+        
+        .add-noun-btn:hover {
+            background: #5a6fd6;
+        }
+        
+        .add-column-btn {
+            background: #4ecdc4;
+            color: white;
             margin-bottom: 30px;
         }
-        .top-actions-right {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            flex-wrap: wrap;
+        
+        .add-column-btn:hover {
+            background: #44b8b0;
         }
-        .top-actions .add-column-btn,
-        .top-actions .imc-rescan-btn,
-        .top-actions .feishu-sheet-btn { margin-bottom: 0; }
-        .manual-wrapper { margin-top: 20px; }
+        
+        .add-column-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .manual-wrapper {
+            margin-top: 20px;
+        }
+        
+        .manual-column {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            min-width: 250px;
+            flex: 1;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
         .output-section {
             background: white;
             border-radius: 12px;
@@ -142,13 +202,14 @@
             margin-top: 30px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
+        
         .output-label {
             font-weight: 600;
-            font-size: 1.1rem;
             color: #333;
             margin-bottom: 15px;
             display: block;
         }
+        
         .output-textarea {
             width: 100%;
             min-height: 200px;
@@ -162,204 +223,92 @@
             outline: none;
             transition: border-color 0.2s;
         }
-        .output-textarea:focus { border-color: #667eea; }
-        .output-buttons { display: flex; gap: 10px; margin-top: 10px; align-items: center; }
+        
+        .output-textarea:focus {
+            border-color: #667eea;
+        }
+        
         .copy-btn {
-            background: #3F51B5;
-            color: #ffffff;
+            background: #95e1d3;
+            color: #333;
             border: none;
-            padding: 0 18px;
-            height: 38px;
+            padding: 8px 16px;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
+            margin-top: 0px;
             transition: background-color 0.2s;
         }
-        .copy-btn, .export-excel-btn, .danger-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            line-height: 1;
+        
+        .copy-btn:hover {
+            background: #86d1c4;
         }
-        .copy-btn:hover { background: #2d3a85; }
-        .copy-btn.copied { background: #2e3b83; color: white; }
-        .generate-btn { background: #667eea; color: white; }
-        .generate-btn:hover { background: #5a6fd6; }
-        .generate-hover { display: flex; align-items: center; gap: 10px; }
-        .generate-hint {
-            display: none;
-            color: #505050;
-            font-size: 0.85rem;
-            line-height: 1;
+        
+        .copy-btn.copied {
+            background: #26de81;
+            color: white;
         }
-        .generate-hover:hover .generate-hint { display: inline-block; }
+        
+        .output-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
         .export-excel-btn {
-            background: #026FFF;
+            background: #f39c12;
             color: white;
             border: none;
-            padding: 0 18px;
-            height: 38px;
+            padding: 8px 16px;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
+            line-height: 1.5;
             transition: all 0.2s;
         }
-        .export-excel-btn:hover { background: #e67e22; }
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background: linear-gradient(135deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.6));
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            z-index: 1000;
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;   
-            transition: opacity 180ms ease, visibility 180ms ease;
+        
+        .export-excel-btn:hover {
+            background: #e67e22;
         }
-        .modal-overlay.show {
-            opacity: 1;
-            visibility: visible;
-            pointer-events: auto;
+        
+        .export-excel-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
         }
-        .modal {
-            width: min(900px, 100%);
-            background: #fff;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            max-height: 85vh;
-            transform: translateY(10px) scale(0.98);
-            opacity: 0;
-            transition: transform 180ms ease, opacity 180ms ease;
-        }
-        .modal-overlay.show .modal { transform: translateY(0) scale(1); opacity: 1; }
-        .modal-header {
-            padding: 14px 16px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid #eee;
-        }
-        .modal-title { font-weight: 600; color: #333; }
-        .modal-close {
-            background: none;
-            border: none;
-            font-size: 20px;
-            cursor: pointer;
-            color: #666;
-            padding: 6px 10px;
-            border-radius: 6px;
-        }
-        .modal-close:hover { background: #f2f2f2; }
-        .modal-body {
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            flex: 1;
-            overflow: hidden;
-        }
-        .result-list {
-            border: 2px dashed #e0e0e0;
-            border-radius: 8px;
-            padding: 10px;
-            min-height: 180px;
-            flex: 1;
-            overflow: auto;
-        }
-        .result-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 8px 10px;
-            border-radius: 6px;
-            background: #f7f7f7;
-            margin-bottom: 8px;
-        }
-        .result-row:last-child { margin-bottom: 0; }
-        .result-checkbox { width: 16px; height: 16px; }
-        .result-text {
-            flex: 1;
-            font-size: 0.92rem;
-            color: #333;
-            cursor: pointer;
-            word-break: break-word;
-        }
-        .result-input {
-            flex: 1;
-            padding: 8px 10px;
-            border: 2px solid #e0e0e0;
-            border-radius: 6px;
-            font-size: 0.92rem;
-            outline: none;
-        }
-        .result-input:focus { border-color: #667eea; }
-        .modal-actions {
-            display: flex;
-            gap: 10px;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        .modal-actions .output-buttons { margin-top: 0; }
-        .danger-btn {
-            background: #ff6b6b;
-            color: white;
-            border: none;
-            padding: 0 18px;
-            height: 38px;
-            border-radius: 6px;
-            cursor: pointer;
+        
+        .info-text {
+            text-align: center;
+            color: rgba(255,255,255,0.8);
             font-size: 0.9rem;
+            margin-top: 20px;
         }
-        .danger-btn:hover { background: #ff5252; }
-        .result-add-btn {
-            width: 100%;
-            border: 2px dashed #cfcfcf;
-            background: #fff;
-            border-radius: 8px;
-            padding: 10px 12px;
-            cursor: pointer;
-            font-size: 18px;
-            line-height: 1;
-            color: #667eea;
-            transition: border-color 0.2s, background-color 0.2s;
-        }
-        .result-add-btn:hover { border-color: #667eea; background: #f6f7ff; }
+        
         @media (max-width: 768px) {
-            .top-actions { flex-direction: column; align-items: stretch; }
-            .columns-wrapper { flex-direction: column; }
-            .column { min-width: 100%; }
+            .columns-wrapper {
+                flex-direction: column;
+            }
+            
+            .column {
+                min-width: 100%;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>拆词加词助手</h1>
-        <div class="top-actions">
-            <button class="add-column-btn" id="addColumnBtn">点击新增一列</button>
-
-
-            <div class="top-actions-right">
-                <button class="add-column-btn feishu-sheet-btn" id="feishuSheetBtn">飞书表格落表</button>
-                <button class="add-column-btn imc-rescan-btn" id="imcRescanBtn">IMC-GID回扫</button>
-                <button class="add-column-btn imc-rescan-btn" id="imcSRescanBtn">IMC-素材回扫</button>
-            </div>
-        </div>
+        <h1>拆词加词生成器</h1>
+        
+        <button class="add-column-btn" id="addColumnBtn">+ 新增一列</button>
+        
         <div class="columns-wrapper" id="columnsWrapper">
             <div class="column" data-column-index="0">
                 <div class="column-header">
                     <span class="column-title">第 1 列</span>
                 </div>
-                <div class="noun-list" id="nounList0"></div>
+                <div class="noun-list" id="nounList0">
+                </div>
                 <div class="add-noun-input">
-                    <input type="text" class="noun-input" id="nounInput0" placeholder="输入需要排列组合的单个词语或词组后，回车或点击添加按钮">
+                    <input type="text" class="noun-input" id="nounInput0" placeholder="输入名词">
                     <button class="add-noun-btn" data-column="0">添加</button>
                 </div>
             </div>
@@ -368,76 +317,65 @@
                     <span class="column-title">第 2 列</span>
                     <button class="column-remove" onclick="removeColumn(this)">×</button>
                 </div>
-                <div class="noun-list" id="nounList1"></div>
+                <div class="noun-list" id="nounList1">
+                </div>
                 <div class="add-noun-input">
-                    <input type="text" class="noun-input" id="nounInput1" placeholder="输入需要排列组合的单个词语或词组后，回车或点击添加按钮">
+                    <input type="text" class="noun-input" id="nounInput1" placeholder="输入名词">
                     <button class="add-noun-btn" data-column="1">添加</button>
                 </div>
             </div>
         </div>
+        
         <div class="manual-wrapper">
             <div class="column" id="manualColumn">
                 <div class="column-header">
                     <span class="column-title">单独添加</span>
                 </div>
-                <div class="noun-list" id="manualList"></div>
+                <div class="noun-list" id="manualList">
+                </div>
                 <div class="add-noun-input">
-                    <input type="text" class="noun-input" id="manualKeywordInput" placeholder="输入需要单独添加的词语或词组">
+                    <input type="text" class="noun-input" id="manualKeywordInput" placeholder="输入关键词组">
                     <button class="add-noun-btn" id="manualAddBtn">添加</button>
                 </div>
             </div>
         </div>
+        
         <div class="output-section">
-            <span class="output-label">词组预览</span>
+            <span class="output-label">导出结果：</span>
             <textarea class="output-textarea" id="outputTextarea" readonly></textarea>
             <div class="output-buttons">
-                
-                <div class="generate-hover">
-                    <button class="copy-btn generate-btn" id="generateBtn">编辑并导出结果</button>
-                    <span class="generate-hint">（进入确认页面，导出前可对以上结果进行调整删改）</span>
-                </div>
+                <button class="copy-btn" id="copyBtn">复制结果并跳转至业务安全平台</button>
+                <button class="export-excel-btn" id="exportExcelBtn">导出文件并跳转至IMC加词</button>
             </div>
         </div>
-    </div>
-
-    <div class="modal-overlay" id="resultModal">
-        <div class="modal" role="dialog" aria-modal="true">
-            <div class="modal-header">
-                <div class="modal-title">生成结果</div>
-                <button class="modal-close" id="resultModalCloseBtn">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="result-list" id="resultList"></div>
-                <div class="modal-actions">
-                    <button class="danger-btn" id="deleteSelectedBtn">删除选中</button>
-                    <div class="output-buttons">
-                        <button class="copy-btn" id="copyBtn">复制结果并跳转至业务安全平台</button>
-                        <button class="export-excel-btn" id="exportExcelBtn">导出文件并跳转至IMC加词</button>
-                    </div>
-                </div>
-            </div>
-
-        </div>
+        
+        <!-- <p class="info-text">提示：每列添加名词后，点击导出可生成所有组合排列</p> -->
     </div>
 
     <script>
         const MAX_COLUMNS = 5;
         let columnCount = 2;
         let manualKeywords = [];
-        let modalLines = [];
 
         function addManualKeyword() {
             const input = document.getElementById('manualKeywordInput');
             const keyword = input.value.trim();
+            
             if (!keyword) return;
+            
             manualKeywords.push(keyword);
+            
             const list = document.getElementById('manualList');
             const item = document.createElement('div');
             item.className = 'noun-item';
-            item.innerHTML = `<span class="noun-text">${keyword}</span><button class="noun-remove" onclick="removeManualKeyword(this, '${keyword}')">×</button>`;
+            item.innerHTML = `
+                <span class="noun-text">${keyword}</span>
+                <button class="noun-remove" onclick="removeManualKeyword(this, '${keyword}')">×</button>
+            `;
             list.appendChild(item);
             input.value = '';
             input.focus();
+            
             updateOutput();
         }
 
@@ -450,32 +388,47 @@
         function updateOutput() {
             const columns = document.querySelectorAll('.column:not(#manualColumn)');
             const nounLists = [];
+            
             columns.forEach(col => {
                 const items = col.querySelectorAll('.noun-item');
                 const nouns = Array.from(items).map(item => item.querySelector('.noun-text').textContent);
-                if (nouns.length > 0) nounLists.push(nouns);
+                if (nouns.length > 0) {
+                    nounLists.push(nouns);
+                }
             });
+            
             let result = [];
-            if (manualKeywords.length > 0) result = [...manualKeywords];
+            
+            if (manualKeywords.length > 0) {
+                result = [...manualKeywords];
+            }
+            
             if (nounLists.length > 0) {
                 const combinations = cartesianProduct(nounLists);
                 const combinationStrings = combinations.map(row => row.join(','));
                 result = [...result, ...combinationStrings];
             }
+            
             document.getElementById('outputTextarea').value = result.join('\n');
         }
 
         function addNoun(columnIndex) {
             const input = document.getElementById(`nounInput${columnIndex}`);
             const noun = input.value.trim();
+            
             if (!noun) return;
+            
             const list = document.getElementById(`nounList${columnIndex}`);
             const item = document.createElement('div');
             item.className = 'noun-item';
-            item.innerHTML = `<span class="noun-text">${noun}</span><button class="noun-remove" onclick="removeNoun(this)">×</button>`;
+            item.innerHTML = `
+                <span class="noun-text">${noun}</span>
+                <button class="noun-remove" onclick="removeNoun(this)">×</button>
+            `;
             list.appendChild(item);
             input.value = '';
             input.focus();
+            
             updateOutput();
         }
 
@@ -486,138 +439,91 @@
 
         function addColumn() {
             if (columnCount >= MAX_COLUMNS) return;
+            
             columnCount++;
             const wrapper = document.getElementById('columnsWrapper');
             const column = document.createElement('div');
             column.className = 'column';
             column.dataset.columnIndex = columnCount - 1;
-            column.innerHTML = `<div class="column-header"><span class="column-title">第 ${columnCount} 列</span><button class="column-remove" onclick="removeColumn(this)">×</button></div><div class="noun-list" id="nounList${columnCount - 1}"></div><div class="add-noun-input"><input type="text" class="noun-input" id="nounInput${columnCount - 1}" placeholder="输入名词"><button class="add-noun-btn" data-column="${columnCount - 1}">添加</button></div>`;
+            column.innerHTML = `
+                <div class="column-header">
+                    <span class="column-title">第 ${columnCount} 列</span>
+                    <button class="column-remove" onclick="removeColumn(this)">×</button>
+                </div>
+                <div class="noun-list" id="nounList${columnCount - 1}">
+                </div>
+                <div class="add-noun-input">
+                    <input type="text" class="noun-input" id="nounInput${columnCount - 1}" placeholder="输入名词">
+                    <button class="add-noun-btn" data-column="${columnCount - 1}">添加</button>
+                </div>
+            `;
             wrapper.appendChild(column);
-            if (columnCount >= MAX_COLUMNS) document.getElementById('addColumnBtn').disabled = true;
+            
+            if (columnCount >= MAX_COLUMNS) {
+                document.getElementById('addColumnBtn').disabled = true;
+            }
         }
 
         function removeColumn(btn) {
             btn.parentElement.parentElement.remove();
             columnCount--;
+            
             document.getElementById('addColumnBtn').disabled = false;
+            
             const columns = document.querySelectorAll('.column:not(#manualColumn)');
             columns.forEach((col, index) => {
                 col.dataset.columnIndex = index;
                 col.querySelector('.column-title').textContent = `第 ${index + 1} 列`;
             });
+            
             updateOutput();
         }
 
         function cartesianProduct(arrays) {
-            return arrays.reduce((acc, arr) => acc.flatMap(a => arr.map(b => [...a, b])), [[]]);
-        }
-
-        function getOutputLines() {
-            const textarea = document.getElementById('outputTextarea');
-            return textarea.value.split('\n').map(s => s.trim()).filter(Boolean);
-        }
-
-        function setOutputLines(lines) {
-            document.getElementById('outputTextarea').value = lines.join('\n');
-        }
-
-        function renderModalList() {
-            const container = document.getElementById('resultList');
-            container.innerHTML = '';
-            modalLines.forEach((line, index) => {
-                const row = document.createElement('div');
-                row.className = 'result-row';
-                row.innerHTML = `
-                    <input class="result-checkbox" type="checkbox" data-index="${index}">
-                    <span class="result-text" data-index="${index}"></span>
-                `;
-                row.querySelector('.result-text').textContent = line;
-                container.appendChild(row);
-            });
-
-            const addBtn = document.createElement('button');
-            addBtn.type = 'button';
-            addBtn.className = 'result-add-btn';
-            addBtn.id = 'resultAddBtn';
-            addBtn.textContent = '+';
-            container.appendChild(addBtn);
-        }
-
-        function openResultModal() {
-            modalLines = getOutputLines();
-            renderModalList();
-            document.getElementById('resultModal').classList.add('show');
-        }
-
-        function closeResultModal() {
-            document.getElementById('resultModal').classList.remove('show');
-        }
-
-        function deleteSelectedLines() {
-            const checks = Array.from(document.querySelectorAll('#resultList .result-checkbox:checked'));
-            if (checks.length === 0) return;
-            const indices = new Set(checks.map(c => Number(c.dataset.index)));
-            modalLines = modalLines.filter((_, i) => !indices.has(i));
-            setOutputLines(modalLines);
-            renderModalList();
-        }
-
-        function startEditLine(index) {
-            const rows = document.querySelectorAll('#resultList .result-row');
-            const row = rows[index];
-            if (!row) return;
-            const textEl = row.querySelector('.result-text');
-            if (!textEl) return;
-            const current = modalLines[index] ?? '';
-            const input = document.createElement('input');
-            input.className = 'result-input';
-            input.value = current;
-            textEl.replaceWith(input);
-            input.focus();
-            input.setSelectionRange(input.value.length, input.value.length);
-
-            const commit = () => {
-                const value = input.value.trim();
-                if (!value) {
-                    modalLines.splice(index, 1);
-                } else {
-                    modalLines[index] = value;
-                }
-                setOutputLines(modalLines);
-                renderModalList();
-            };
-
-            input.addEventListener('blur', commit, { once: true });
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') commit();
-                if (e.key === 'Escape') renderModalList();
-            });
-        }
-
-        function addTempLine() {
-            modalLines.push('');
-            renderModalList();
-            startEditLine(modalLines.length - 1);
+            return arrays.reduce((acc, arr) => {
+                return acc.flatMap(a => arr.map(b => [...a, b]));
+            }, [[]]);
         }
 
         function copyResult() {
             const textarea = document.getElementById('outputTextarea');
             if (!textarea.value) return;
+            
             navigator.clipboard.writeText(textarea.value).then(() => {
                 const btn = document.getElementById('copyBtn');
                 btn.textContent = '已复制';
                 btn.classList.add('copied');
-                setTimeout(() => { btn.textContent = '复制结果并跳转至业务安全平台'; btn.classList.remove('copied'); }, 2000);
+                setTimeout(() => {
+                    btn.textContent = '复制结果并跳转至业务安全平台';
+                    btn.classList.remove('copied');
+                }, 2000);
+                
                 window.open('https://safe.bytedance.net/strategy/antidirt2/tag_list/detail/6180', '_blank');
             });
         }
 
         function exportToExcel() {
-            const lines = getOutputLines();
-            if (lines.length === 0) {
-                alert('导出结果为空');
+            if (!window.XLSX || !XLSX.utils) {
+                alert('导出失败：未能加载 XLSX 依赖，请检查网络或稍后重试');
                 return;
             }
+
+            const columns = document.querySelectorAll('.column:not(#manualColumn)');
+            const nounLists = [];
+            
+            columns.forEach(col => {
+                const items = col.querySelectorAll('.noun-item');
+                const nouns = Array.from(items).map(item => item.querySelector('.noun-text').textContent);
+                if (nouns.length > 0) {
+                    nounLists.push(nouns);
+                }
+            });
+            
+            if (manualKeywords.length === 0 && nounLists.length === 0) {
+                alert('至少需要添加一个关键词或一列名词');
+                return;
+            }
+            
             const expireDate = new Date();
             expireDate.setMonth(expireDate.getMonth() + 1);
             const year = expireDate.getFullYear();
@@ -627,77 +533,51 @@
             const minutes = String(expireDate.getMinutes()).padStart(2, '0');
             const seconds = String(expireDate.getSeconds()).padStart(2, '0');
             const expireTime = `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
-            let csv = '\uFEFFstop_keyword,expire_time\n';
-            lines.forEach(keyword => {
-                csv += `"${keyword.replace(/"/g, '""')}",${expireTime}\n`;
+            
+            const worksheetData = [];
+            worksheetData.push(['stop_keyword', 'expire_time']);
+            
+            if (manualKeywords.length > 0) {
+                manualKeywords.forEach(keyword => {
+                    worksheetData.push([keyword, expireTime]);
+                });
+            }
+            
+            if (nounLists.length > 0) {
+                const result = cartesianProduct(nounLists);
+                result.forEach(row => {
+                    worksheetData.push([row.join(','), expireTime]);
+                });
+            }
+            
+            const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, '拆词表');
+
+            const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([wbout], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             });
-            const blob = new Blob([csv], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = URL.createObjectURL(blob);
+            const blobUrl = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url;
+            a.href = blobUrl;
             a.download = '拆词表.xlsx';
             document.body.appendChild(a);
             a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            window.open('https://bee.bytedance.net/1533/combine-imc/16410/data', '_blank');
+            a.remove();
+            URL.revokeObjectURL(blobUrl);
+
+            setTimeout(() => {
+                window.open('https://bee.bytedance.net/1533/combine-imc/16410/data', '_blank');
+            }, 150);
         }
 
-        function openFeishuSheet() {
-            window.open('https://bytedance.larkoffice.com/sheets/X3lzs3LKOhsJ1Bth11Cc7wXvndf', '_blank');
-        }
-
-        function openImcRescan() {
-            const now = new Date();
-            const startMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0).getTime();
-            const endMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0).getTime() - 1;
-            const url = new URL('https://imc.bytedance.net/tools/push-intercept/material-group');
-            url.searchParams.set('curAppId', '1128');
-            url.searchParams.set('isNewTask', '0');
-            url.searchParams.set('startCreateTime', String(startMs));
-            url.searchParams.set('endCreateTime', String(endMs));
-            url.searchParams.set('pageNum', '1');
-            window.open(url.toString(), '_blank');
-        }
-        function openImcSRescan() {
-            const now = new Date();
-            const startMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0).getTime();
-            const endMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0).getTime() - 1;
-            const url = new URL('https://imc.bytedance.net/tools/push-intercept/material-intercept');
-            url.searchParams.set('curAppId', '1128');
-            url.searchParams.set('isNewTask', '0');
-            url.searchParams.set('startCreateTime', String(startMs));
-            url.searchParams.set('endCreateTime', String(endMs));
-            url.searchParams.set('pageNum', '1');
-            window.open(url.toString(), '_blank');
-        }
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('addColumnBtn').addEventListener('click', addColumn);
             document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
             document.getElementById('copyBtn').addEventListener('click', copyResult);
-            document.getElementById('feishuSheetBtn').addEventListener('click', openFeishuSheet);
-            document.getElementById('imcRescanBtn').addEventListener('click', openImcRescan);
-            document.getElementById('imcSRescanBtn').addEventListener('click', openImcSRescan);
             document.getElementById('manualAddBtn').addEventListener('click', addManualKeyword);
-            document.getElementById('generateBtn').addEventListener('click', openResultModal);
-            document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelectedLines);
-            document.getElementById('resultModalCloseBtn').addEventListener('click', closeResultModal);
-            document.getElementById('resultModal').addEventListener('click', (e) => {
-                if (e.target && e.target.id === 'resultModal') closeResultModal();
-            });
-            document.getElementById('resultList').addEventListener('click', (e) => {
-                const addBtn = e.target.closest('#resultAddBtn');
-                if (addBtn) {
-                    addTempLine();
-                    return;
-                }
-                const el = e.target.closest('.result-text');
-                if (!el) return;
-                startEditLine(Number(el.dataset.index));
-            });
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') closeResultModal();
-            });
+            
             document.addEventListener('click', (e) => {
                 const btn = e.target.closest('.add-noun-btn');
                 if (btn && btn.id !== 'manualAddBtn') {
@@ -705,10 +585,12 @@
                     addNoun(columnIndex);
                 }
             });
+            
             document.addEventListener('keydown', (e) => {
                 if (e.target.classList.contains('noun-input') && e.key === 'Enter') {
-                    if (e.target.id === 'manualKeywordInput') addManualKeyword();
-                    else {
+                    if (e.target.id === 'manualKeywordInput') {
+                        addManualKeyword();
+                    } else {
                         const columnIndex = parseInt(e.target.id.replace('nounInput', ''));
                         addNoun(columnIndex);
                     }
