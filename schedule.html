@@ -1,0 +1,2085 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自动排班 - 带班首页</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg-start: #eef4ff;
+            --bg-end: #f8fbff;
+            --primary: #246bfe;
+            --primary-dark: #1749b6;
+            --green: #12a150;
+            --orange: #f79009;
+            --red: #d92d20;
+            --text: #162033;
+            --muted: #667085;
+            --card: rgba(255, 255, 255, 0.9);
+            --border: rgba(36, 107, 254, 0.12);
+            --shadow: 0 20px 60px rgba(21, 54, 120, 0.12);
+        }
+
+        html {
+            background: linear-gradient(135deg, var(--bg-start), var(--bg-end));
+        }
+
+        body {
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(36, 107, 254, 0.18), transparent 32%),
+                linear-gradient(135deg, var(--bg-start), var(--bg-end));
+            background-attachment: fixed;
+        }
+
+        button,
+        input,
+        select {
+            font: inherit;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        .page {
+            width: min(1440px, calc(100% - 28px));
+            margin: 0 auto;
+            padding: 28px 0 56px;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            min-height: 38px;
+            padding: 0 14px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.8);
+            color: var(--primary-dark);
+            font-weight: 800;
+            text-decoration: none;
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 18px;
+            align-items: end;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            margin-bottom: 18px;
+            padding: 24px;
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            background: var(--card);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(16px);
+        }
+
+        .eyebrow {
+            margin-bottom: 8px;
+            color: var(--primary);
+            font-size: 0.86rem;
+            font-weight: 900;
+        }
+
+        h1 {
+            margin-bottom: 8px;
+            font-size: clamp(2rem, 5vw, 3.6rem);
+            line-height: 1.05;
+            letter-spacing: 1px;
+        }
+
+        .hero-desc,
+        .muted {
+            color: var(--muted);
+            line-height: 1.65;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 40px;
+            padding: 0 14px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 14px;
+            background: #fff;
+            color: var(--primary-dark);
+            font-weight: 800;
+            transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 28px rgba(36, 107, 254, 0.12);
+        }
+
+        .btn.primary {
+            border-color: var(--primary);
+            background: var(--primary);
+            color: #fff;
+        }
+
+        .btn.ghost {
+            background: rgba(255, 255, 255, 0.68);
+        }
+
+        .btn.active {
+            border-color: var(--primary);
+            background: rgba(36, 107, 254, 0.1);
+            color: var(--primary-dark);
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 18px;
+            align-items: start;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+        }
+
+        .panel {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            overflow: visible;
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            background: var(--card);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(16px);
+        }
+
+        .panel:has(.person-card.active) {
+            z-index: 30;
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            width: 100%;
+            min-width: 0;
+            padding: 18px 18px 0;
+        }
+
+        .panel-title {
+            font-size: 1.08rem;
+            letter-spacing: -0.03em;
+        }
+
+        .panel-body {
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            overflow: visible;
+            padding: 18px;
+        }
+
+        .calendar-wrap {
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding-bottom: 8px;
+        }
+
+        .schedule-table {
+            width: max-content;
+            min-width: 100%;
+            max-width: none;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+
+        .schedule-table th,
+        .schedule-table td {
+            border-right: 1px solid rgba(36, 107, 254, 0.1);
+            border-bottom: 1px solid rgba(36, 107, 254, 0.1);
+            padding: 10px;
+            vertical-align: top;
+            background: rgba(255, 255, 255, 0.68);
+        }
+
+        .schedule-table th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #f6f9ff;
+            font-size: 0.82rem;
+            white-space: nowrap;
+        }
+
+        .schedule-table .row-head {
+            position: sticky;
+            left: 0;
+            z-index: 3;
+            min-width: 92px;
+            background: #f6f9ff;
+            color: var(--primary-dark);
+            font-weight: 900;
+        }
+
+        .date-head {
+            display: grid;
+            gap: 2px;
+        }
+
+        .date-rule-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 6px;
+        }
+
+        .date-rule-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 6px;
+            border: 0;
+            border-radius: 999px;
+            background: rgba(18, 161, 80, 0.14);
+            color: #027a48;
+            font-size: 0.7rem;
+            font-weight: 900;
+            line-height: 1.2;
+        }
+
+        .date-rule-pill.blocked {
+            background: rgba(217, 45, 32, 0.12);
+            color: #b42318;
+        }
+
+        .date-rule-pill.rest {
+            background: rgba(247, 144, 9, 0.14);
+            color: #b54708;
+        }
+
+        .date-rule-pill .pill-delete {
+            opacity: 0;
+        }
+
+        .date-rule-pill:hover .pill-delete {
+            opacity: 1;
+        }
+
+        .weekday {
+            color: var(--muted);
+            font-size: 0.74rem;
+            font-weight: 700;
+        }
+
+        .cell {
+            min-width: 118px;
+            min-height: 86px;
+            cursor: pointer;
+        }
+
+        .cell-person-list {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 6px;
+        }
+
+        body.manual-menu-open {
+            overflow: hidden;
+        }
+
+        .manual-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 9998;
+            background: rgba(22, 32, 51, 0.18);
+            cursor: default;
+            touch-action: none;
+        }
+
+        .manual-menu {
+            position: fixed;
+            z-index: 10000;
+            display: grid;
+            gap: 8px;
+            width: min(260px, calc(100vw - 28px));
+            padding: 12px;
+            border: 1px solid rgba(36, 107, 254, 0.14);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.98);
+            box-shadow: 0 20px 52px rgba(21, 54, 120, 0.18);
+        }
+
+        .manual-menu-title {
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-weight: 900;
+        }
+
+        .manual-option-list {
+            display: grid;
+            gap: 6px;
+        }
+
+        .manual-option {
+            min-height: 34px;
+            padding: 0 10px;
+            border: 1px solid rgba(36, 107, 254, 0.12);
+            border-radius: 12px;
+            background: rgba(36, 107, 254, 0.06);
+            color: var(--primary-dark);
+            font-size: 0.84rem;
+            font-weight: 900;
+            text-align: left;
+        }
+
+        .manual-option:hover {
+            border-color: var(--primary);
+            background: rgba(36, 107, 254, 0.12);
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            max-width: 100%;
+            padding: 4px 7px;
+            border-radius: 999px;
+            background: rgba(36, 107, 254, 0.1);
+            color: var(--primary-dark);
+            font-size: 0.76rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .pill.locked {
+            background: rgba(18, 161, 80, 0.14);
+            color: #027a48;
+        }
+
+        .pill.blocked {
+            background: rgba(217, 45, 32, 0.12);
+            color: #b42318;
+        }
+
+        .pill.warning {
+            background: rgba(247, 144, 9, 0.14);
+            color: #b54708;
+        }
+
+        .pill-delete {
+            display: inline-grid;
+            width: 14px;
+            height: 14px;
+            place-items: center;
+            border-radius: 50%;
+            background: var(--red);
+            color: #fff;
+            font-size: 0.68rem;
+            line-height: 1;
+            opacity: 0;
+            transition: opacity 0.16s;
+        }
+
+        .pill.locked:hover .pill-delete,
+        .pill.blocked:hover .pill-delete {
+            opacity: 1;
+        }
+
+        .empty {
+            color: #98a2b3;
+            font-size: 0.82rem;
+        }
+
+        .fixed-empty-action {
+            border: 0;
+            background: transparent;
+            color: #98a2b3;
+            font-size: 0.82rem;
+            text-align: left;
+        }
+
+        .people-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            gap: 12px;
+        }
+
+        .person-card {
+            position: relative;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            min-height: 0;
+            padding: 14px;
+            border: 1px solid rgba(36, 107, 254, 0.12);
+            border-radius: 22px;
+            background: rgba(255, 255, 255, 0.72);
+            text-align: left;
+            overflow: visible;
+            transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+        }
+
+        .person-card-header {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 12px;
+            align-items: start;
+            width: 100%;
+            min-width: 0;
+            border: 0;
+            background: transparent;
+            color: inherit;
+            text-align: left;
+        }
+
+        .person-info {
+            display: block;
+            min-width: 0;
+        }
+
+        .person-title-line {
+            display: inline-flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            width: fit-content;
+            max-width: 100%;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .person-card.active {
+            border-color: var(--primary);
+            box-shadow: 0 14px 36px rgba(36, 107, 254, 0.14);
+            transform: translateY(-1px);
+            z-index: 12;
+        }
+
+        .avatar {
+            display: inline-grid;
+            width: 48px;
+            height: 48px;
+            place-items: center;
+            justify-self: end;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(36, 107, 254, 0.16), rgba(18, 161, 80, 0.14));
+            color: var(--primary-dark);
+            font-weight: 900;
+        }
+
+        .person-name {
+            font-size: 1.04rem;
+            font-weight: 900;
+        }
+
+        .person-summary-inline {
+            color: var(--muted);
+            font-size: 0.76rem;
+            font-weight: 500;
+        }
+
+        .person-summary {
+            display: block;
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-weight: 500;
+            line-height: 1.55;
+        }
+
+        .person-preferences {
+            display: block;
+            position: absolute;
+            top: calc(100% - 8px);
+            left: 50%;
+            right: auto;
+            z-index: 20;
+            width: min(560px, calc(100vw - 56px));
+            max-width: calc(100vw - 56px);
+            pointer-events: none;
+            visibility: hidden;
+            transition: visibility 0s linear 0.2s;
+        }
+
+        .person-preferences-inner {
+            display: grid;
+            gap: 12px;
+            max-height: min(520px, calc(100vh - 120px));
+            overflow: auto;
+            padding: 14px 12px;
+            border: 1px solid rgba(36, 107, 254, 0.12);
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.96);
+            box-shadow: 0 18px 40px rgba(21, 54, 120, 0.16);
+            opacity: 0;
+            transform: translateY(-8px);
+            transform-origin: top center;
+            transition: opacity 0.18s ease, transform 0.2s ease, visibility 0s linear 0.2s;
+            will-change: opacity, transform;
+        }
+
+        .person-card.active .person-preferences {
+            visibility: visible;
+            pointer-events: auto;
+            transition-delay: 0s;
+        }
+
+        .person-card.active .person-preferences-inner {
+            opacity: 1;
+            transform: translateY(0);
+            transition-delay: 0s;
+        }
+
+        .person-card.prefs-placement-center .person-preferences {
+            left: 50%;
+            right: auto;
+            transform: translateX(-50%);
+        }
+
+        .person-card.prefs-placement-center .person-preferences-inner {
+            transform-origin: top center;
+        }
+
+        .person-card.prefs-placement-left .person-preferences {
+            left: 0;
+            right: auto;
+            transform: none;
+        }
+
+        .person-card.prefs-placement-left .person-preferences-inner {
+            transform-origin: top left;
+        }
+
+        .person-card.prefs-placement-right .person-preferences {
+            left: auto;
+            right: 0;
+            transform: none;
+        }
+
+        .person-card.prefs-placement-right .person-preferences-inner {
+            transform-origin: top right;
+        }
+
+        .fixed-row {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            gap: 8px;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .expand-toggle {
+            display: inline-grid;
+            width: 28px;
+            height: 28px;
+            place-items: center;
+            position: relative;
+            padding: 0;
+            border: 1px solid rgba(36, 107, 254, 0.14);
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.76);
+            color: transparent;
+            font-size: 0;
+            font-weight: 900;
+            line-height: 1;
+            transition: transform 0.24s ease, background 0.2s ease, border-color 0.2s ease;
+        }
+
+        .expand-toggle::before {
+            content: "";
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 7px;
+            height: 7px;
+            border-right: 2px solid var(--primary-dark);
+            border-bottom: 2px solid var(--primary-dark);
+            transform: translate(-50%, -62%) rotate(45deg);
+        }
+
+        .expand-toggle.active {
+            border-color: var(--primary);
+            background: rgba(36, 107, 254, 0.1);
+            transform: rotate(180deg);
+        }
+
+        .shift-tabs,
+        .fixed-tags {
+            display: flex;
+            flex-wrap: wrap;
+            max-width: 100%;
+            min-width: 0;
+            gap: 8px;
+        }
+
+        .fixed-tags {
+            align-items: center;
+        }
+
+        .shift-tab {
+            min-height: 34px;
+            padding: 0 12px;
+            border: 1px solid rgba(36, 107, 254, 0.14);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.74);
+            color: var(--primary-dark);
+            font-size: 0.82rem;
+            font-weight: 900;
+        }
+
+        .shift-tab.active {
+            border-color: var(--primary);
+            background: rgba(36, 107, 254, 0.12);
+        }
+
+        .shift-tab.rest.active {
+            border-color: var(--orange);
+            background: rgba(247, 144, 9, 0.14);
+            color: #b54708;
+        }
+
+        .mode-tabs {
+            display: inline-flex;
+            width: fit-content;
+            padding: 4px;
+            border-radius: 999px;
+            background: rgba(102, 112, 133, 0.1);
+        }
+
+        .mode-tab {
+            min-height: 30px;
+            padding: 0 12px;
+            border: 0;
+            border-radius: 999px;
+            background: transparent;
+            color: var(--muted);
+            font-size: 0.8rem;
+            font-weight: 900;
+        }
+
+        .mode-tab.active.work {
+            background: rgba(18, 161, 80, 0.14);
+            color: #027a48;
+        }
+
+        .mode-tab.active.block {
+            background: rgba(217, 45, 32, 0.12);
+            color: #b42318;
+        }
+
+        .inline-date-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+            gap: 8px;
+            max-height: min(260px, calc(100vh - 300px));
+            overflow: auto;
+            padding: 8px;
+            border: 1px solid rgba(36, 107, 254, 0.1);
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        .date-chip {
+            min-height: 32px;
+            border: 1px solid rgba(36, 107, 254, 0.12);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.76);
+            color: var(--muted);
+            font-size: 0.76rem;
+            font-weight: 900;
+        }
+
+        .date-chip.active {
+            border-color: var(--green);
+            background: rgba(18, 161, 80, 0.14);
+            color: #027a48;
+        }
+
+        .date-chip.rest-active {
+            border-color: var(--orange);
+            background: rgba(247, 144, 9, 0.14);
+            color: #b54708;
+        }
+
+        .date-chip.block-active {
+            border-color: var(--red);
+            background: rgba(217, 45, 32, 0.12);
+            color: #b42318;
+        }
+
+        .fixed-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            max-width: 100%;
+            min-height: 28px;
+            padding: 0 8px;
+            border-radius: 999px;
+            background: rgba(36, 107, 254, 0.1);
+            color: var(--primary-dark);
+            font-size: 0.76rem;
+            font-weight: 900;
+            line-height: 1;
+            cursor: grab;
+        }
+
+        .fixed-tag.rest {
+            background: rgba(247, 144, 9, 0.14);
+            color: #b54708;
+        }
+
+        .fixed-tag.blocked {
+            background: rgba(217, 45, 32, 0.12);
+            color: #b42318;
+        }
+
+        .delete-tag {
+            display: grid;
+            width: 16px;
+            height: 16px;
+            place-items: center;
+            flex: 0 0 16px;
+            border: 0;
+            border-radius: 50%;
+            background: var(--red);
+            color: #fff;
+            font-size: 0.7rem;
+            line-height: 1;
+            opacity: 0;
+            transition: opacity 0.16s;
+        }
+
+        .fixed-tag:hover .delete-tag {
+            opacity: 1;
+        }
+
+        .form-grid {
+            display: grid;
+            gap: 12px;
+        }
+
+        .field {
+            display: grid;
+            gap: 7px;
+        }
+
+        .label {
+            color: var(--text);
+            font-size: 0.86rem;
+            font-weight: 900;
+        }
+
+        .input,
+        .select {
+            width: 100%;
+            min-height: 40px;
+            padding: 0 12px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.82);
+            color: var(--text);
+            outline: none;
+        }
+
+        .rule-list {
+            display: grid;
+            gap: 8px;
+            max-height: 180px;
+            overflow: auto;
+        }
+
+        .rule-item {
+            padding: 10px;
+            border-radius: 14px;
+            background: rgba(36, 107, 254, 0.06);
+            color: var(--muted);
+            font-size: 0.82rem;
+            line-height: 1.55;
+        }
+
+        .solution-list {
+            display: grid;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            gap: 10px;
+        }
+
+        .solution-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            min-width: 0;
+            padding: 12px;
+            border: 1px solid rgba(36, 107, 254, 0.1);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.72);
+        }
+
+        .solution-card.active {
+            border-color: var(--primary);
+            background: rgba(36, 107, 254, 0.08);
+        }
+
+        .toast {
+            position: fixed;
+            left: 50%;
+            bottom: 28px;
+            z-index: 20;
+            transform: translateX(-50%) translateY(18px);
+            padding: 12px 18px;
+            border-radius: 999px;
+            background: rgba(22, 32, 51, 0.92);
+            color: #fff;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s, transform 0.2s;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        @media (max-width: 1100px) {
+            .hero,
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .toolbar {
+                justify-content: flex-start;
+            }
+        }
+
+        @media (max-width: 720px) {
+            .page {
+                width: min(100% - 20px, 1440px);
+                padding-top: 18px;
+            }
+
+            .people-list {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <div class="topbar">
+            <a class="back-link" href="index.html">返回带班首页</a>
+        </div>
+
+        <section class="hero">
+            <div>
+                <div class="eyebrow">可用功能 · 自动排班</div>
+                <h1>自动排班</h1>
+                <p class="hero-desc" id="rangeText">正在生成排班周期...</p>
+            </div>
+            <div class="toolbar">
+                <button class="btn active" type="button" id="shiftViewBtn">班次视图</button>
+                <button class="btn" type="button" id="personViewBtn">人员视图</button>
+                <button class="btn primary" type="button" id="solveBtn">自动排班</button>
+                <button class="btn ghost" type="button" id="clearBtn">清空排班</button>
+            </div>
+        </section>
+
+        <div class="layout">
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2 class="panel-title" id="calendarTitle">日历排班</h2>
+                        <p class="muted">点击已排班人员标签可将该安排固定，再次点击可取消固定。</p>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="calendar-wrap" id="calendarWrap"></div>
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2 class="panel-title">人员列表</h2>
+                        <p class="muted">点击人员卡片展开选择；点击班次后选择日期，会实时固定到日历和人员卡片中。</p>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="people-list" id="peopleList"></div>
+                    <div class="toolbar" style="justify-content: flex-start; margin-top: 12px;">
+                        <button class="btn ghost" type="button" id="addPersonBtn">新增人员</button>
+                        <button class="btn ghost" type="button" id="removePersonBtn">删除当前人员</button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2 class="panel-title">候选排班</h2>
+                        <p class="muted">自动求解后最多展示 10 个候选方案。</p>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="solution-list" id="solutionList"></div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script>
+        const shifts = [
+            { id: 'morning', name: '早' },
+            { id: 'normal', name: '常' },
+            { id: 'night', name: '晚' },
+        ];
+
+        const state = {
+            viewMode: 'shift',
+            selectedPersonId: 'p1',
+            openPersonId: '',
+            preferenceShifts: {},
+            preferenceModes: {},
+            people: [
+                { id: 'p1', name: '林小北' },
+                { id: 'p2', name: '陈一舟' },
+                { id: 'p3', name: '周明远' },
+                { id: 'p4', name: '赵雨晴' },
+                { id: 'p5', name: '孙嘉木' },
+                { id: 'p6', name: '吴星澜' },
+                { id: 'p7', name: '郑南风' },
+                { id: 'p8', name: '王予安' },
+                { id: 'p9', name: '韩知夏' },
+                { id: 'p10', name: '许清和' },
+                { id: 'p11', name: '沈临川' },
+                { id: 'p12', name: '宋映月' },
+            ],
+            rules: {},
+            assignments: {},
+            locked: {},
+            solutions: [],
+            activeSolutionIndex: -1,
+        };
+
+        const calendarWrap = document.getElementById('calendarWrap');
+        const peopleList = document.getElementById('peopleList');
+        const solutionList = document.getElementById('solutionList');
+        const rangeText = document.getElementById('rangeText');
+        const calendarTitle = document.getElementById('calendarTitle');
+        const toast = document.getElementById('toast');
+        let toastTimer = null;
+
+        function getCycleDates() {
+            const today = new Date();
+            let startYear = today.getFullYear();
+            let startMonth = today.getMonth();
+            if (today.getDate() > 15) {
+                startMonth += 1;
+            }
+            const start = new Date(startYear, startMonth, 16);
+            const end = new Date(start.getFullYear(), start.getMonth() + 1, 15);
+            const dates = [];
+            for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                dates.push({
+                    key: formatDateKey(d),
+                    label: `${d.getMonth() + 1}/${d.getDate()}`,
+                    full: `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`,
+                    dayIndex: d.getDay(),
+                    weekday: ['日', '一', '二', '三', '四', '五', '六'][d.getDay()],
+                });
+            }
+            return dates;
+        }
+
+        const dates = getCycleDates();
+
+        function formatDateKey(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function showToast(message) {
+            toast.textContent = message;
+            toast.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+        }
+
+        function getRule(personId, dateKey) {
+            state.rules[personId] ||= {};
+            state.rules[personId][dateKey] ||= {
+                allow: new Set(),
+                block: new Set(),
+                vacation: false,
+            };
+            return state.rules[personId][dateKey];
+        }
+
+        function getAssignment(dateKey, shiftId) {
+            state.assignments[dateKey] ||= {};
+            state.assignments[dateKey][shiftId] ||= [];
+            return state.assignments[dateKey][shiftId];
+        }
+
+        function personName(personId) {
+            return state.people.find((person) => person.id === personId)?.name || '未知人员';
+        }
+
+        function assignmentKey(dateKey, shiftId, personId) {
+            return `${dateKey}|${shiftId}|${personId}`;
+        }
+
+        function renderRange() {
+            rangeText.textContent = `默认周期：${dates[0].full} 至 ${dates[dates.length - 1].full}。工作日至少 7 人在班，周末至少 6 人，周一/周三固定按 9 人配置；早晚班优先均分。`;
+        }
+
+        function getDateConfig(dateKey) {
+            const date = dates.find((item) => item.key === dateKey);
+            if (!date) {
+                return {
+                    required: 7,
+                    options: [
+                        { morning: 3, normal: 0, night: 4 },
+                        { morning: 3, normal: 1, night: 3 },
+                        { morning: 4, normal: 0, night: 3 },
+                    ],
+                };
+            }
+
+            if (date.dayIndex === 1 || date.dayIndex === 3) {
+                return {
+                    required: 9,
+                    options: [
+                        { morning: 4, normal: 0, night: 5 },
+                        { morning: 4, normal: 1, night: 4 },
+                        { morning: 5, normal: 0, night: 4 },
+                    ],
+                };
+            }
+
+            if (date.dayIndex === 0 || date.dayIndex === 6) {
+                return {
+                    required: 6,
+                    options: [
+                        { morning: 3, normal: 0, night: 3 },
+                    ],
+                };
+            }
+
+            return {
+                required: 7,
+                options: [
+                    { morning: 3, normal: 0, night: 4 },
+                    { morning: 3, normal: 1, night: 3 },
+                    { morning: 4, normal: 0, night: 3 },
+                ],
+            };
+        }
+
+        function renderPeople() {
+            peopleList.innerHTML = state.people.map((person) => {
+                const stats = getPersonStats(person.id);
+                const active = person.id === state.openPersonId ? ' active' : '';
+                const currentShift = getPreferenceShift(person.id);
+                const currentMode = getPreferenceMode(person.id);
+                return `
+                    <article class="person-card${active}" data-person-id="${person.id}">
+                        <button class="person-card-header" type="button" data-person-toggle="${person.id}">
+                            <span class="person-info">
+                                <span class="person-title-line">
+                                    <span class="person-name">${person.name}</span>
+                                    <span class="person-summary-inline">已排 ${stats.workDays} 天 / 早 ${stats.morning} 晚 ${stats.night} 常 ${stats.normal}</span>
+                                </span>
+                                <span class="person-summary">
+                                    已固定 ${stats.rules} 天（休假 ${stats.vacations} 天）
+                                </span>
+                            </span>
+                            <span class="avatar">${person.name.slice(0, 1)}</span>
+                        </button>
+                        <div class="fixed-row">
+                            <button class="expand-toggle${active ? ' active' : ''}" type="button" data-person-toggle="${person.id}" aria-label="${active ? '收起班次偏好' : '展开班次偏好'}" aria-expanded="${active ? 'true' : 'false'}">⌄</button>
+                            <div class="fixed-tags">${renderFixedTags(person.id)}</div>
+                        </div>
+                        <div class="person-preferences">
+                            <div class="person-preferences-inner">
+                                <div class="shift-tabs">
+                                    <button class="shift-tab${currentShift === 'all' ? ' active' : ''}" type="button" data-pref-shift="all" data-person="${person.id}">
+                                        全天
+                                    </button>
+                                    ${shifts.map((shift) => `
+                                        <button class="shift-tab${currentShift === shift.id ? ' active' : ''}" type="button" data-pref-shift="${shift.id}" data-person="${person.id}">
+                                            ${shift.name}班
+                                        </button>
+                                    `).join('')}
+                                    <button class="shift-tab rest${currentShift === 'rest' ? ' active' : ''}" type="button" data-pref-shift="rest" data-person="${person.id}">
+                                        休假
+                                    </button>
+                                </div>
+                                <div class="mode-tabs" aria-label="固定类型">
+                                    <button class="mode-tab work${currentMode === 'work' ? ' active' : ''}" type="button" data-pref-mode="work" data-person="${person.id}">固定上</button>
+                                    <button class="mode-tab block${currentMode === 'block' ? ' active' : ''}" type="button" data-pref-mode="block" data-person="${person.id}">固定不上</button>
+                                </div>
+                                <div class="inline-date-grid">
+                                    ${dates.map((date) => renderPreferenceDate(person.id, date, currentShift, currentMode)).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+
+            peopleList.querySelectorAll('[data-fixed-tag]').forEach((tag) => {
+                tag.addEventListener('dragstart', (event) => {
+                    event.dataTransfer.setData('text/plain', JSON.stringify({
+                        personId: tag.dataset.person,
+                        dateKey: tag.dataset.date,
+                        shiftId: tag.dataset.shift,
+                        mode: tag.dataset.mode,
+                    }));
+                });
+            });
+
+            syncPreferencePlacement();
+        }
+
+        function refreshPeopleOnly() {
+            renderPeople();
+        }
+
+        function refreshPeopleAndCalendar() {
+            renderPeople();
+            renderCalendar();
+        }
+
+        function syncPreferencePlacement() {
+            const popupWidth = Math.min(560, Math.max(260, window.innerWidth - 56));
+            const viewportPadding = 16;
+            peopleList.querySelectorAll('.person-card').forEach((card) => {
+                const isActive = card.dataset.personId === state.openPersonId;
+                let placement = 'prefs-placement-center';
+
+                if (isActive) {
+                    const rect = card.getBoundingClientRect();
+                    const centeredLeft = rect.left + (rect.width / 2) - (popupWidth / 2);
+                    const centeredRight = centeredLeft + popupWidth;
+                    if (centeredLeft < viewportPadding) {
+                        placement = 'prefs-placement-left';
+                    } else if (centeredRight > window.innerWidth - viewportPadding) {
+                        placement = 'prefs-placement-right';
+                    }
+                }
+
+                card.classList.remove('prefs-placement-center', 'prefs-placement-left', 'prefs-placement-right');
+                card.classList.add(placement);
+            });
+        }
+
+        function getPreferenceShift(personId) {
+            return state.preferenceShifts[personId] || 'morning';
+        }
+
+        function getPreferenceMode(personId) {
+            return state.preferenceModes[personId] || 'work';
+        }
+
+        function renderPreferenceDate(personId, date, currentShift, currentMode) {
+            const rule = getRule(personId, date.key);
+            const active = currentShift === 'rest'
+                ? rule.vacation
+                : currentMode === 'block'
+                    ? rule.block.has(currentShift)
+                    : rule.allow.has(currentShift);
+            const activeClass = active ? (currentShift === 'rest' ? ' rest-active' : currentMode === 'block' ? ' block-active' : ' active') : '';
+            return `
+                <button class="date-chip${activeClass}" type="button" data-pref-date="${date.key}" data-person="${personId}">
+                    ${date.label} 周${date.weekday}
+                </button>
+            `;
+        }
+
+        function renderFixedTags(personId) {
+            const tags = [];
+            dates.forEach((date) => {
+                const rule = getRule(personId, date.key);
+                if (rule.vacation) {
+                    tags.push(renderFixedTag(personId, date.key, 'rest', 'rest', `${date.label} 休`));
+                }
+                rule.allow.forEach((shiftId) => {
+                    const label = shiftId === 'all'
+                        ? `${date.label} 全天 固定上`
+                        : `${date.label} ${getShiftName(shiftId)}班 固定上`;
+                    tags.push(renderFixedTag(personId, date.key, shiftId, 'work', label));
+                });
+                rule.block.forEach((shiftId) => {
+                    const label = shiftId === 'all'
+                        ? `${date.label} 全天 不上`
+                        : `${date.label} ${getShiftName(shiftId)}班 不上`;
+                    tags.push(renderFixedTag(personId, date.key, shiftId, 'block', label));
+                });
+            });
+            return tags.length ? tags.join('') : `<button class="fixed-empty-action" type="button" data-person-toggle="${personId}">暂无固定班次，点击添加</button>`;
+        }
+
+        function renderFixedTag(personId, dateKey, shiftId, mode, label) {
+            const restClass = shiftId === 'rest' ? ' rest' : '';
+            const blockClass = mode === 'block' ? ' blocked' : '';
+            return `
+                <span class="fixed-tag${restClass}${blockClass}" draggable="true" data-fixed-tag data-person="${personId}" data-date="${dateKey}" data-shift="${shiftId}" data-mode="${mode}">
+                    ${label}
+                    <button class="delete-tag" type="button" data-delete-fixed data-person="${personId}" data-date="${dateKey}" data-shift="${shiftId}" data-mode="${mode}" aria-label="删除固定项">×</button>
+                </span>
+            `;
+        }
+
+        function parseDragData(event) {
+            try {
+                return JSON.parse(event.dataTransfer.getData('text/plain'));
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function togglePreferenceDate(personId, dateKey) {
+            const shiftId = getPreferenceShift(personId);
+            const mode = getPreferenceMode(personId);
+            const rule = getRule(personId, dateKey);
+            if (shiftId === 'rest') {
+                if (rule.vacation) {
+                    removePreference(personId, dateKey, 'rest', 'rest');
+                } else {
+                    setVacation(personId, dateKey);
+                }
+            } else if (mode === 'block') {
+                if (rule.block.has(shiftId)) {
+                    removePreference(personId, dateKey, shiftId, 'block');
+                } else {
+                    setBlockedShift(personId, dateKey, shiftId);
+                }
+            } else if (rule.allow.has(shiftId)) {
+                removePreference(personId, dateKey, shiftId, 'work');
+            } else {
+                setFixedShift(personId, dateKey, shiftId);
+            }
+        }
+
+        function movePreference(source, targetDateKey, targetShiftId) {
+            if (source.personId !== state.selectedPersonId) {
+                state.selectedPersonId = source.personId;
+            }
+            removePreference(source.personId, source.dateKey, source.shiftId, source.mode);
+            if (source.mode === 'rest' || targetShiftId === 'rest') {
+                setVacation(source.personId, targetDateKey);
+            } else if (source.mode === 'block') {
+                setBlockedShift(source.personId, targetDateKey, targetShiftId);
+            } else {
+                setFixedShift(source.personId, targetDateKey, targetShiftId);
+            }
+            showToast('已移动固定项');
+        }
+
+        function setVacation(personId, dateKey) {
+            const rule = getRule(personId, dateKey);
+            rule.vacation = true;
+            rule.allow.clear();
+            rule.block.clear();
+            removePersonFromDate(personId, dateKey);
+        }
+
+        function setFixedShift(personId, dateKey, shiftId) {
+            const rule = getRule(personId, dateKey);
+            rule.vacation = false;
+            if (shiftId === 'all') {
+                rule.block.delete('all');
+                rule.allow.clear();
+                rule.allow.add('all');
+                removePersonFromDate(personId, dateKey);
+                return;
+            }
+            rule.block.delete(shiftId);
+            rule.block.delete('all');
+            rule.allow.clear();
+            rule.allow.add(shiftId);
+            removePersonFromDate(personId, dateKey);
+            getAssignment(dateKey, shiftId).push(personId);
+            state.locked[assignmentKey(dateKey, shiftId, personId)] = true;
+        }
+
+        function setBlockedShift(personId, dateKey, shiftId) {
+            const rule = getRule(personId, dateKey);
+            rule.vacation = false;
+            if (shiftId === 'all') {
+                rule.allow.clear();
+                rule.block.clear();
+                rule.block.add('all');
+                removePersonFromDate(personId, dateKey);
+                return;
+            }
+            rule.allow.delete(shiftId);
+            rule.allow.delete('all');
+            rule.block.add(shiftId);
+            state.assignments[dateKey] ||= {};
+            state.assignments[dateKey][shiftId] = (state.assignments[dateKey][shiftId] || []).filter((id) => id !== personId);
+            delete state.locked[assignmentKey(dateKey, shiftId, personId)];
+        }
+
+        function removePreference(personId, dateKey, shiftId, mode = 'work') {
+            const rule = getRule(personId, dateKey);
+            if (shiftId === 'rest') {
+                rule.vacation = false;
+                return;
+            }
+            if (mode === 'block') {
+                rule.block.delete(shiftId);
+            } else {
+                rule.allow.delete(shiftId);
+                if (shiftId !== 'all') {
+                    state.assignments[dateKey] ||= {};
+                    state.assignments[dateKey][shiftId] = (state.assignments[dateKey][shiftId] || []).filter((id) => id !== personId);
+                    delete state.locked[assignmentKey(dateKey, shiftId, personId)];
+                }
+            }
+        }
+
+        function renderCalendar() {
+            calendarTitle.textContent = state.viewMode === 'shift' ? '日历排班：班次视图' : '日历排班：人员视图';
+            const rows = state.viewMode === 'shift'
+                ? shifts.map((shift) => ({ id: shift.id, label: `${shift.name}班`, type: 'shift' }))
+                : state.people.map((person) => ({ id: person.id, label: person.name, type: 'person' }));
+
+            const header = `
+                <tr>
+                    <th class="row-head">${state.viewMode === 'shift' ? '班次' : '人员'}</th>
+                    ${dates.map((date) => `
+                        <th>
+                            ${renderDateHeader(date)}
+                        </th>
+                    `).join('')}
+                </tr>
+            `;
+
+            const body = rows.map((row) => `
+                <tr>
+                    <th class="row-head">${row.label}</th>
+                    ${dates.map((date) => `<td class="cell" data-cell-type="${row.type}" data-row-id="${row.id}" data-date="${date.key}">${renderCell(row, date.key)}</td>`).join('')}
+                </tr>
+            `).join('');
+
+            calendarWrap.innerHTML = `<table class="schedule-table">${header}${body}</table>`;
+            calendarWrap.querySelectorAll('[data-lock]').forEach((item) => {
+                item.addEventListener('click', () => {
+                    const personId = item.dataset.person;
+                    const dateKey = item.dataset.date;
+                    const shiftId = item.dataset.shift;
+                    const key = assignmentKey(dateKey, shiftId, personId);
+                    if (state.locked[key]) {
+                        removePreference(personId, dateKey, shiftId);
+                        showToast('已删除该固定排班');
+                    } else {
+                        setFixedShift(personId, dateKey, shiftId);
+                        showToast('已固定该排班');
+                    }
+                    refreshPeopleAndCalendar();
+                });
+            });
+            calendarWrap.querySelectorAll('[data-block]').forEach((item) => {
+                item.addEventListener('click', () => {
+                    removePreference(item.dataset.person, item.dataset.date, item.dataset.shift, 'block');
+                    showToast('已删除固定不上');
+                    refreshPeopleAndCalendar();
+                });
+            });
+            calendarWrap.querySelectorAll('[data-day-rule]').forEach((item) => {
+                item.addEventListener('click', () => {
+                    const shiftId = item.dataset.mode === 'rest' ? 'rest' : 'all';
+                    removePreference(item.dataset.person, item.dataset.date, shiftId, item.dataset.mode);
+                    showToast(item.dataset.mode === 'rest' ? '已删除休假' : '已删除全天固定');
+                    refreshPeopleAndCalendar();
+                });
+            });
+        }
+
+        function renderDateHeader(date) {
+            const rules = state.people.flatMap((person) => {
+                const rule = getRule(person.id, date.key);
+                const items = [];
+                if (rule.allow.has('all')) {
+                    items.push(renderDayRulePill(person.id, date.key, 'work', `${person.name} 全天可上`));
+                }
+                if (rule.block.has('all')) {
+                    items.push(renderDayRulePill(person.id, date.key, 'block', `${person.name} 全天不上`));
+                }
+                if (rule.vacation) {
+                    items.push(renderDayRulePill(person.id, date.key, 'rest', `${person.name} 休假`));
+                }
+                return items;
+            }).join('');
+
+            return `
+                <span class="date-head">
+                    <strong>${date.label}</strong>
+                    <span class="weekday">周${date.weekday}</span>
+                    ${rules ? `<span class="date-rule-list">${rules}</span>` : ''}
+                </span>
+            `;
+        }
+
+        function renderDayRulePill(personId, dateKey, mode, label) {
+            const blockedClass = mode === 'block' ? ' blocked' : '';
+            const restClass = mode === 'rest' ? ' rest' : '';
+            return `<button class="date-rule-pill${blockedClass}${restClass}" type="button" data-day-rule data-person="${personId}" data-date="${dateKey}" data-mode="${mode}">${label}<span class="pill-delete">×</span></button>`;
+        }
+
+        function renderCell(row, dateKey) {
+            if (row.type === 'shift') {
+                const assigned = getAssignment(dateKey, row.id);
+                const blocked = getBlockedPeople(dateKey, row.id);
+                if (!assigned.length && !blocked.length) {
+                    return '<span class="empty">待排</span>';
+                }
+                return `<div class="cell-person-list">
+                    ${assigned.map((personId) => renderPersonPill(dateKey, row.id, personId)).join('')}
+                    ${blocked.map((personId) => renderBlockedPill(dateKey, row.id, personId, `${personName(personId)} 不上`)).join('')}
+                </div>`;
+            }
+
+            const shiftsForPerson = shifts.filter((shift) => getAssignment(dateKey, shift.id).includes(row.id));
+            const rule = getRule(row.id, dateKey);
+            const blockedShifts = shifts.filter((shift) => rule.block.has(shift.id));
+            if (rule.vacation) {
+                return '<span class="pill warning">休假</span>';
+            }
+            if (!shiftsForPerson.length && !blockedShifts.length) {
+                return '<span class="empty">休</span>';
+            }
+            return `<div class="cell-person-list">
+                ${shiftsForPerson.map((shift) => renderPersonShiftPill(dateKey, shift.id, row.id)).join('')}
+                ${blockedShifts.map((shift) => renderBlockedPill(dateKey, shift.id, row.id, `不上${shift.name}班`)).join('')}
+            </div>`;
+        }
+
+        function renderPersonPill(dateKey, shiftId, personId) {
+            const locked = state.locked[assignmentKey(dateKey, shiftId, personId)] ? ' locked' : '';
+            const deleteHint = locked ? '<span class="pill-delete">×</span>' : '';
+            return `<button class="pill${locked}" type="button" data-lock data-date="${dateKey}" data-shift="${shiftId}" data-person="${personId}">${personName(personId)}${locked ? ' 固定' : ''}${deleteHint}</button>`;
+        }
+
+        function renderPersonShiftPill(dateKey, shiftId, personId) {
+            const shift = shifts.find((item) => item.id === shiftId);
+            const locked = state.locked[assignmentKey(dateKey, shiftId, personId)] ? ' locked' : '';
+            const deleteHint = locked ? '<span class="pill-delete">×</span>' : '';
+            return `<button class="pill${locked}" type="button" data-lock data-date="${dateKey}" data-shift="${shiftId}" data-person="${personId}">${shift.name}班${locked ? ' 固定' : ''}${deleteHint}</button>`;
+        }
+
+        function renderBlockedPill(dateKey, shiftId, personId, label) {
+            return `<button class="pill blocked" type="button" data-block data-date="${dateKey}" data-shift="${shiftId}" data-person="${personId}">${label}<span class="pill-delete">×</span></button>`;
+        }
+
+        function getBlockedPeople(dateKey, shiftId) {
+            return state.people
+                .filter((person) => getRule(person.id, dateKey).block.has(shiftId))
+                .map((person) => person.id);
+        }
+
+        function closeManualMenu() {
+            document.querySelector('.manual-menu')?.remove();
+            document.querySelector('.manual-backdrop')?.remove();
+            document.body.classList.remove('manual-menu-open');
+        }
+
+        function showManualMenu(cell, event) {
+            closeManualMenu();
+            const dateKey = cell.dataset.date;
+            const rowId = cell.dataset.rowId;
+            const cellType = cell.dataset.cellType;
+            const options = cellType === 'shift'
+                ? state.people.map((person) => ({ id: person.id, label: person.name }))
+                : shifts.map((shift) => ({ id: shift.id, label: `${shift.name}班` }));
+            const title = cellType === 'shift' ? '选择排班人员' : '选择分配班次';
+
+            const backdrop = document.createElement('div');
+            backdrop.className = 'manual-backdrop';
+            backdrop.addEventListener('click', closeManualMenu);
+            backdrop.addEventListener('wheel', (event) => event.preventDefault(), { passive: false });
+            backdrop.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false });
+
+            const menu = document.createElement('div');
+            menu.className = 'manual-menu';
+            menu.innerHTML = `
+                <div class="manual-menu-title">${title}</div>
+                <div class="manual-option-list">
+                    ${options.map((option) => `<button class="manual-option" type="button" data-option-id="${option.id}">${option.label}</button>`).join('')}
+                </div>
+            `;
+
+            const left = Math.min(event.clientX, window.innerWidth - 280);
+            const top = Math.min(event.clientY, window.innerHeight - 260);
+            menu.style.left = `${Math.max(12, left)}px`;
+            menu.style.top = `${Math.max(12, top)}px`;
+
+            menu.querySelectorAll('[data-option-id]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    if (cellType === 'shift') {
+                        setFixedShift(button.dataset.optionId, dateKey, rowId);
+                    } else {
+                        setFixedShift(rowId, dateKey, button.dataset.optionId);
+                    }
+                    closeManualMenu();
+                    showToast('已手动固定排班');
+                    refreshPeopleAndCalendar();
+                });
+            });
+
+            document.body.classList.add('manual-menu-open');
+            document.body.appendChild(backdrop);
+            document.body.appendChild(menu);
+        }
+
+        function renderSolutions() {
+            solutionList.innerHTML = state.solutions.length
+                ? state.solutions.map((solution, index) => `
+                    <div class="solution-card${index === state.activeSolutionIndex ? ' active' : ''}">
+                        <div>
+                            <strong>方案 ${index + 1}</strong>
+                            <p class="muted">满足 ${solution.filled} 个在班坑位，评分 ${solution.score}</p>
+                        </div>
+                        <button class="btn ghost" type="button" data-solution-index="${index}">查看</button>
+                    </div>
+                `).join('')
+                : '<div class="rule-item">暂无候选方案，点击“自动排班”后生成。</div>';
+
+            solutionList.querySelectorAll('[data-solution-index]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const index = Number(button.dataset.solutionIndex);
+                    state.assignments = cloneAssignments(state.solutions[index].assignments);
+                    state.activeSolutionIndex = index;
+                    renderAll();
+                });
+            });
+        }
+
+        function shiftNames(ids) {
+            return ids.map((id) => shifts.find((shift) => shift.id === id)?.name).filter(Boolean).join('、');
+        }
+
+        function getShiftName(shiftId) {
+            if (shiftId === 'all') {
+                return '全天';
+            }
+            return shifts.find((shift) => shift.id === shiftId)?.name || '';
+        }
+
+        function getPersonStats(personId) {
+            const stats = { workDays: 0, morning: 0, normal: 0, night: 0, rules: 0, vacations: 0 };
+            dates.forEach((date) => {
+                let worked = false;
+                shifts.forEach((shift) => {
+                    if (getAssignment(date.key, shift.id).includes(personId)) {
+                        stats[shift.id] += 1;
+                        worked = true;
+                    }
+                });
+                const rule = getRule(personId, date.key);
+                if (!rule.vacation && (rule.allow.size || rule.block.size)) {
+                    stats.rules += 1;
+                }
+                if (rule.vacation) {
+                    stats.vacations += 1;
+                }
+                if (worked) {
+                    stats.workDays += 1;
+                }
+            });
+            return stats;
+        }
+
+        function removePersonFromDate(personId, dateKey) {
+            shifts.forEach((shift) => {
+                state.assignments[dateKey] ||= {};
+                state.assignments[dateKey][shift.id] = (state.assignments[dateKey][shift.id] || []).filter((id) => id !== personId);
+                delete state.locked[assignmentKey(dateKey, shift.id, personId)];
+            });
+        }
+
+        function clearAssignments(keepLocked = true) {
+            const lockedAssignments = {};
+            if (keepLocked) {
+                Object.keys(state.locked).forEach((key) => {
+                    const [dateKey, shiftId, personId] = key.split('|');
+                    lockedAssignments[dateKey] ||= {};
+                    lockedAssignments[dateKey][shiftId] ||= [];
+                    lockedAssignments[dateKey][shiftId].push(personId);
+                });
+            }
+            state.assignments = lockedAssignments;
+            state.solutions = [];
+            state.activeSolutionIndex = -1;
+            renderAll();
+        }
+
+        function solveSchedules() {
+            const results = [];
+            for (let seed = 0; seed < 30 && results.length < 10; seed += 1) {
+                const attempt = buildSchedule(seed);
+                if (attempt) {
+                    const signature = JSON.stringify(attempt.assignments);
+                    if (!results.some((item) => JSON.stringify(item.assignments) === signature)) {
+                        results.push(attempt);
+                    }
+                }
+            }
+
+            results.sort((a, b) => b.score - a.score);
+
+            state.solutions = results;
+            if (results.length) {
+                state.assignments = cloneAssignments(results[0].assignments);
+                state.activeSolutionIndex = 0;
+                showToast(`已生成 ${results.length} 个候选方案`);
+            } else {
+                showToast('暂未找到满足基础约束的方案，可减少固定限制后重试');
+            }
+            renderAll();
+        }
+
+        function buildSchedule(seed) {
+            const assignments = cloneLockedAssignments();
+            dates.forEach((date) => {
+                assignments[date.key] ||= {};
+                shifts.forEach((shift) => assignments[date.key][shift.id] ||= []);
+            });
+
+            for (const date of dates) {
+                const planOptions = getDateConfig(date.key).options;
+                let scheduled = false;
+
+                for (const plan of planOptions) {
+                    const snapshot = cloneDateAssignments(assignments[date.key]);
+                    if (fillDateAssignments(assignments, date.key, plan, seed)) {
+                        scheduled = true;
+                        break;
+                    }
+                    assignments[date.key] = snapshot;
+                }
+
+                if (!scheduled) {
+                    return null;
+                }
+            }
+
+            const score = scoreSchedule(assignments);
+            return {
+                assignments,
+                filled: dates.reduce((sum, date) => sum + getDateConfig(date.key).required, 0),
+                score,
+            };
+        }
+
+        function cloneDateAssignments(dateAssignments = {}) {
+            const snapshot = {};
+            shifts.forEach((shift) => {
+                snapshot[shift.id] = [...(dateAssignments[shift.id] || [])];
+            });
+            return snapshot;
+        }
+
+        function fillDateAssignments(assignments, dateKey, plan, seed) {
+            const fillOrder = ['night', 'morning', 'normal'];
+
+            for (const shiftId of fillOrder) {
+                if ((assignments[dateKey][shiftId] || []).length > plan[shiftId]) {
+                    return false;
+                }
+            }
+
+            for (const shiftId of fillOrder) {
+                while ((assignments[dateKey][shiftId] || []).length < plan[shiftId]) {
+                    const candidate = pickCandidate(assignments, dateKey, shiftId, seed + fillOrder.indexOf(shiftId));
+                    if (!candidate) {
+                        return false;
+                    }
+                    assignments[dateKey][shiftId].push(candidate.id);
+                }
+            }
+
+            return true;
+        }
+
+        function pickCandidate(assignments, dateKey, shiftId, seed) {
+            const people = shuffle([...state.people], seed + dateKey.charCodeAt(dateKey.length - 1) + shiftId.length);
+            const validPeople = people
+                .filter((person) => canAssign(assignments, person.id, dateKey, shiftId))
+                .map((person) => ({ person, load: getWorkDays(assignments, person.id), recent: getRecentWorkDays(assignments, person.id, dateKey) }))
+                .sort((a, b) => (a.load - b.load) || (a.recent - b.recent));
+            return validPeople[0]?.person || null;
+        }
+
+        function canAssign(assignments, personId, dateKey, shiftId) {
+            const rule = getRule(personId, dateKey);
+            if (rule.vacation) {
+                return false;
+            }
+            if (rule.allow.size && !rule.allow.has('all') && !rule.allow.has(shiftId)) {
+                return false;
+            }
+            if (rule.block.has('all') || rule.block.has(shiftId)) {
+                return false;
+            }
+            if (shifts.some((shift) => assignments[dateKey]?.[shift.id]?.includes(personId))) {
+                return false;
+            }
+            if (shiftId === 'morning' && hadShiftPreviousDay(assignments, personId, dateKey, 'night')) {
+                return false;
+            }
+            if (wouldExceedSixConsecutive(assignments, personId, dateKey)) {
+                return false;
+            }
+            if (wouldExceedFiveInSeven(assignments, personId, dateKey)) {
+                return false;
+            }
+            return true;
+        }
+
+        function hadShiftPreviousDay(assignments, personId, dateKey, shiftId) {
+            const index = dates.findIndex((date) => date.key === dateKey);
+            if (index <= 0) {
+                return false;
+            }
+            const prevKey = dates[index - 1].key;
+            return assignments[prevKey]?.[shiftId]?.includes(personId);
+        }
+
+        function wouldExceedSixConsecutive(assignments, personId, dateKey) {
+            const index = dates.findIndex((date) => date.key === dateKey);
+            let count = 1;
+            for (let i = index - 1; i >= 0; i -= 1) {
+                if (isWorking(assignments, personId, dates[i].key)) count += 1;
+                else break;
+            }
+            for (let i = index + 1; i < dates.length; i += 1) {
+                if (isWorking(assignments, personId, dates[i].key)) count += 1;
+                else break;
+            }
+            return count > 6;
+        }
+
+        function wouldExceedFiveInSeven(assignments, personId, dateKey) {
+            const index = dates.findIndex((date) => date.key === dateKey);
+            const start = Math.max(0, index - 6);
+            const end = Math.min(dates.length - 1, index + 6);
+            for (let windowStart = start; windowStart <= index && windowStart + 6 <= end; windowStart += 1) {
+                let count = 0;
+                for (let i = windowStart; i < windowStart + 7; i += 1) {
+                    if (dates[i].key === dateKey || isWorking(assignments, personId, dates[i].key)) {
+                        count += 1;
+                    }
+                }
+                if (count > 5) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function isWorking(assignments, personId, dateKey) {
+            return shifts.some((shift) => assignments[dateKey]?.[shift.id]?.includes(personId));
+        }
+
+        function getWorkDays(assignments, personId) {
+            return dates.filter((date) => isWorking(assignments, personId, date.key)).length;
+        }
+
+        function getRecentWorkDays(assignments, personId, dateKey) {
+            const index = dates.findIndex((date) => date.key === dateKey);
+            return dates.slice(Math.max(0, index - 6), index).filter((date) => isWorking(assignments, personId, date.key)).length;
+        }
+
+        function scoreSchedule(assignments) {
+            const loads = state.people.map((person) => getWorkDays(assignments, person.id));
+            const max = Math.max(...loads);
+            const min = Math.min(...loads);
+            const fairnessPenalty = (max - min) * 8;
+            const planPenalty = dates.reduce((sum, date) => {
+                const options = getDateConfig(date.key).options;
+                const current = {
+                    morning: assignments[date.key]?.morning?.length || 0,
+                    normal: assignments[date.key]?.normal?.length || 0,
+                    night: assignments[date.key]?.night?.length || 0,
+                };
+                const planIndex = options.findIndex((option) =>
+                    option.morning === current.morning
+                    && option.normal === current.normal
+                    && option.night === current.night
+                );
+                return sum + (planIndex === -1 ? options.length : planIndex);
+            }, 0);
+            const normalizedPlanPenalty = (planPenalty / dates.length) * 6;
+            return Math.max(0, 100 - fairnessPenalty - normalizedPlanPenalty);
+        }
+
+        function cloneLockedAssignments() {
+            const assignments = {};
+            Object.keys(state.locked).forEach((key) => {
+                const [dateKey, shiftId, personId] = key.split('|');
+                assignments[dateKey] ||= {};
+                assignments[dateKey][shiftId] ||= [];
+                assignments[dateKey][shiftId].push(personId);
+            });
+            return assignments;
+        }
+
+        function cloneAssignments(assignments) {
+            const cloned = {};
+            Object.keys(assignments).forEach((dateKey) => {
+                cloned[dateKey] = {};
+                Object.keys(assignments[dateKey]).forEach((shiftId) => {
+                    cloned[dateKey][shiftId] = [...assignments[dateKey][shiftId]];
+                });
+            });
+            return cloned;
+        }
+
+        function shuffle(items, seed) {
+            const result = [...items];
+            let value = seed || 1;
+            for (let i = result.length - 1; i > 0; i -= 1) {
+                value = (value * 9301 + 49297) % 233280;
+                const j = value % (i + 1);
+                [result[i], result[j]] = [result[j], result[i]];
+            }
+            return result;
+        }
+
+        function renderAll() {
+            renderRange();
+            renderPeople();
+            renderCalendar();
+            renderSolutions();
+        }
+
+        function syncOpenPersonCard() {
+            syncPreferencePlacement();
+            peopleList.querySelectorAll('.person-card').forEach((card) => {
+                const isActive = card.dataset.personId === state.openPersonId;
+                card.classList.toggle('active', isActive);
+                card.querySelectorAll('[data-person-toggle]').forEach((toggle) => {
+                    toggle.setAttribute('aria-expanded', isActive ? 'true' : 'false');
+                    if (toggle.classList.contains('expand-toggle')) {
+                        toggle.classList.toggle('active', isActive);
+                        toggle.setAttribute('aria-label', isActive ? '收起班次偏好' : '展开班次偏好');
+                    }
+                });
+            });
+        }
+
+        function toggleOpenPerson(personId) {
+            state.selectedPersonId = personId;
+            state.openPersonId = state.openPersonId === personId ? '' : personId;
+            syncOpenPersonCard();
+        }
+
+        function closeOpenPerson() {
+            if (!state.openPersonId) {
+                return;
+            }
+            state.openPersonId = '';
+            syncOpenPersonCard();
+        }
+
+        document.getElementById('shiftViewBtn').addEventListener('click', () => {
+            state.viewMode = 'shift';
+            document.getElementById('shiftViewBtn').classList.add('active');
+            document.getElementById('personViewBtn').classList.remove('active');
+            renderCalendar();
+        });
+
+        document.getElementById('personViewBtn').addEventListener('click', () => {
+            state.viewMode = 'person';
+            document.getElementById('personViewBtn').classList.add('active');
+            document.getElementById('shiftViewBtn').classList.remove('active');
+            renderCalendar();
+        });
+
+        document.getElementById('solveBtn').addEventListener('click', solveSchedules);
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            state.locked = {};
+            clearAssignments(false);
+            showToast('已清空排班');
+        });
+
+        document.getElementById('addPersonBtn').addEventListener('click', () => {
+            const id = `p${Date.now()}`;
+            state.people.push({ id, name: `新同学${state.people.length + 1}` });
+            state.selectedPersonId = id;
+            state.openPersonId = id;
+            renderAll();
+        });
+
+        document.getElementById('removePersonBtn').addEventListener('click', () => {
+            if (state.people.length <= 1) {
+                showToast('至少保留 1 名人员');
+                return;
+            }
+            const personId = state.selectedPersonId;
+            state.people = state.people.filter((person) => person.id !== personId);
+            dates.forEach((date) => removePersonFromDate(personId, date.key));
+            delete state.rules[personId];
+            delete state.preferenceShifts[personId];
+            delete state.preferenceModes[personId];
+            state.selectedPersonId = state.people[0]?.id || '';
+            state.openPersonId = '';
+            renderAll();
+        });
+
+        peopleList.addEventListener('click', (event) => {
+            const target = event.target.closest('button');
+            if (!target || !peopleList.contains(target)) {
+                return;
+            }
+
+            const toggle = target.closest('[data-person-toggle]');
+            if (toggle) {
+                event.preventDefault();
+                event.stopPropagation();
+                toggleOpenPerson(toggle.dataset.personToggle);
+                return;
+            }
+
+            const shiftButton = target.closest('[data-pref-shift]');
+            if (shiftButton) {
+                event.preventDefault();
+                event.stopPropagation();
+                state.selectedPersonId = shiftButton.dataset.person;
+                state.openPersonId = shiftButton.dataset.person;
+                state.preferenceShifts[shiftButton.dataset.person] = shiftButton.dataset.prefShift;
+                refreshPeopleOnly();
+                return;
+            }
+
+            const modeButton = target.closest('[data-pref-mode]');
+            if (modeButton) {
+                event.preventDefault();
+                event.stopPropagation();
+                state.selectedPersonId = modeButton.dataset.person;
+                state.openPersonId = modeButton.dataset.person;
+                state.preferenceModes[modeButton.dataset.person] = modeButton.dataset.prefMode;
+                refreshPeopleOnly();
+                return;
+            }
+
+            const dateButton = target.closest('[data-pref-date]');
+            if (dateButton) {
+                event.preventDefault();
+                event.stopPropagation();
+                state.selectedPersonId = dateButton.dataset.person;
+                state.openPersonId = dateButton.dataset.person;
+                togglePreferenceDate(dateButton.dataset.person, dateButton.dataset.prefDate);
+                refreshPeopleAndCalendar();
+                return;
+            }
+
+            const deleteButton = target.closest('[data-delete-fixed]');
+            if (deleteButton) {
+                event.preventDefault();
+                event.stopPropagation();
+                removePreference(deleteButton.dataset.person, deleteButton.dataset.date, deleteButton.dataset.shift, deleteButton.dataset.mode);
+                refreshPeopleAndCalendar();
+            }
+        });
+
+        peopleList.addEventListener('dragover', (event) => {
+            if (event.target.closest('[data-pref-shift], [data-pref-date]')) {
+                event.preventDefault();
+            }
+        });
+
+        peopleList.addEventListener('drop', (event) => {
+            const dragData = parseDragData(event);
+            if (!dragData) {
+                return;
+            }
+
+            const shiftButton = event.target.closest('[data-pref-shift]');
+            if (shiftButton) {
+                event.preventDefault();
+                movePreference(dragData, dragData.dateKey, shiftButton.dataset.prefShift);
+                refreshPeopleAndCalendar();
+                return;
+            }
+
+            const dateButton = event.target.closest('[data-pref-date]');
+            if (dateButton) {
+                event.preventDefault();
+                movePreference(dragData, dateButton.dataset.prefDate, dragData.shiftId);
+                refreshPeopleAndCalendar();
+            }
+        });
+
+        calendarWrap.addEventListener('click', (event) => {
+            if (event.target.closest('button')) {
+                return;
+            }
+
+            const cell = event.target.closest('td.cell');
+            if (!cell || !calendarWrap.contains(cell)) {
+                closeManualMenu();
+                return;
+            }
+
+            event.preventDefault();
+            showManualMenu(cell, event);
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest('.manual-menu, td.cell')) {
+                closeManualMenu();
+            }
+            if (!event.target.closest('.person-card')) {
+                closeOpenPerson();
+            }
+        });
+
+        window.addEventListener('resize', syncPreferencePlacement);
+
+        renderAll();
+    </script>
+</body>
+</html>

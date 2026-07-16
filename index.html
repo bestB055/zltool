@@ -3,737 +3,472 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>拆词加词助手</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <title>带班首页</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-start: #eef4ff;
+            --bg-end: #f8fbff;
+            --primary: #246bfe;
+            --primary-dark: #1749b6;
+            --text: #162033;
+            --muted: #667085;
+            --card: rgba(255, 255, 255, 0.88);
+            --border: rgba(36, 107, 254, 0.12);
+            --shadow: 0 20px 60px rgba(21, 54, 120, 0.12);
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(36, 107, 254, 0.18), transparent 32%),
+                linear-gradient(135deg, var(--bg-start), var(--bg-end));
         }
-        .container { max-width: 1200px; margin: 0 auto; }
-        h1 {
-            text-align: center;
-            color: white;
-            margin-bottom: 30px;
-            font-size: 2rem;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+
+        a {
+            color: inherit;
+            text-decoration: none;
         }
-        .columns-wrapper {
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-            margin-bottom: 30px;
+
+        .page {
+            width: min(1180px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 42px 0 56px;
         }
-        .column {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            min-width: 250px;
-            flex: 1;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+
+        .module-card,
+        .section {
+            background: var(--card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(16px);
         }
-        .column-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-        .column-title { font-weight: 600; color: #333; font-size: 1.1rem; }
-        .column-remove {
-            background: #ff6b6b;
-            color: white;
-            border: none;
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: 0.7;
-            transition: opacity 0.2s;
-        }
-        .column-remove:hover { opacity: 1; }
-        .noun-list {
-            min-height: 100px;
-            margin-bottom: 15px;
-            padding: 10px;
-            border: 2px dashed #e0e0e0;
-            border-radius: 8px;
-            transition: border-color 0.2s;
-        }
-        .noun-list:hover { border-color: #667eea; }
-        .noun-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 12px;
-            background: #f5f5f5;
-            border-radius: 6px;
-            margin-bottom: 8px;
-            transition: background-color 0.2s;
-        }
-        .noun-item:hover { background: #e8e8e8; }
-        .noun-text { flex: 1; font-size: 0.9rem; color: #333; }
-        .noun-remove {
-            background: none;
-            border: none;
-            color: #999;
-            cursor: pointer;
-            font-size: 14px;
-            padding: 4px;
-            transition: color 0.2s;
-        }
-        .noun-remove:hover { color: #ff6b6b; }
-        .add-noun-input { display: flex; gap: 8px; }
-        .noun-input {
-            flex: 1;
-            padding: 10px 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 6px;
-            font-size: 0.9rem;
-            transition: border-color 0.2s;
-            outline: none;
-        }
-        .noun-input:focus { border-color: #667eea; }
-        .add-noun-btn, .add-column-btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        .add-noun-btn { background: #667eea; color: white; }
-        .add-noun-btn:hover { background: #5a6fd6; }
-        .add-column-btn { background: #4ecdc4; color: white; margin-bottom: 30px; }
-        .add-column-btn:hover { background: #44b8b0; }
-        .add-column-btn:disabled { background: #ccc; cursor: not-allowed; }
-        .feishu-sheet-btn { background: #39C14F; color: white; margin-bottom: 30px; }
-        .feishu-sheet-btn:hover { background: #2fa342; }
-        .imc-rescan-btn { background: #3a359c; color: white; margin-bottom: 30px; }
-        .imc-rescan-btn:hover { background: #13706a; }
-        .imc-rescan-btn:disabled { background: #6d5f5f; cursor: not-allowed; }
-        .top-actions {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 30px;
-        }
-        .top-actions-right {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        .top-actions .add-column-btn,
-        .top-actions .imc-rescan-btn,
-        .top-actions .feishu-sheet-btn { margin-bottom: 0; }
-        .manual-wrapper { margin-top: 20px; }
-        .output-section {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            margin-top: 30px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        .output-label {
-            font-weight: 600;
-            font-size: 1.1rem;
-            color: #333;
-            margin-bottom: 15px;
-            display: block;
-        }
-        .output-textarea {
-            width: 100%;
-            min-height: 200px;
-            padding: 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 0.9rem;
-            line-height: 1.5;
-            resize: vertical;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-        .output-textarea:focus { border-color: #667eea; }
-        .output-buttons { display: flex; gap: 10px; margin-top: 10px; align-items: center; }
-        .copy-btn {
-            background: #3F51B5;
-            color: #ffffff;
-            border: none;
-            padding: 0 18px;
-            height: 38px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: background-color 0.2s;
-        }
-        .copy-btn, .export-excel-btn, .danger-btn {
+
+        .btn {
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            min-height: 44px;
+            padding: 0 18px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 14px;
+            background: #fff;
+            color: var(--primary-dark);
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(36, 107, 254, 0.14);
+        }
+
+        .btn.primary {
+            border-color: var(--primary);
+            background: var(--primary);
+            color: #fff;
+        }
+
+        .section {
+            border-radius: 24px;
+            padding: 26px;
+        }
+
+        .page-title {
+            margin-bottom: 24px;
             text-align: center;
-            line-height: 1;
         }
-        .copy-btn:hover { background: #2d3a85; }
-        .copy-btn.copied { background: #2e3b83; color: white; }
-        .generate-btn { background: #667eea; color: white; }
-        .generate-btn:hover { background: #5a6fd6; }
-        .generate-hover { display: flex; align-items: center; gap: 10px; }
-        .generate-hint {
-            display: none;
-            color: #505050;
-            font-size: 0.85rem;
-            line-height: 1;
-        }
-        .generate-hover:hover .generate-hint { display: inline-block; }
-        .export-excel-btn {
-            background: #026FFF;
-            color: white;
-            border: none;
-            padding: 0 18px;
-            height: 38px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: all 0.2s;
-        }
-        .export-excel-btn:hover { background: #e67e22; }
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background: linear-gradient(135deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.6));
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            z-index: 1000;
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;   
-            transition: opacity 180ms ease, visibility 180ms ease;
-        }
-        .modal-overlay.show {
-            opacity: 1;
-            visibility: visible;
-            pointer-events: auto;
-        }
-        .modal {
-            width: min(900px, 100%);
-            background: #fff;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            max-height: 85vh;
-            transform: translateY(10px) scale(0.98);
-            opacity: 0;
-            transition: transform 180ms ease, opacity 180ms ease;
-        }
-        .modal-overlay.show .modal { transform: translateY(0) scale(1); opacity: 1; }
-        .modal-header {
-            padding: 14px 16px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid #eee;
-        }
-        .modal-title { font-weight: 600; color: #333; }
-        .modal-close {
-            background: none;
-            border: none;
-            font-size: 20px;
-            cursor: pointer;
-            color: #666;
-            padding: 6px 10px;
-            border-radius: 6px;
-        }
-        .modal-close:hover { background: #f2f2f2; }
-        .modal-body {
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            flex: 1;
-            overflow: hidden;
-        }
-        .result-list {
-            border: 2px dashed #e0e0e0;
-            border-radius: 8px;
-            padding: 10px;
-            min-height: 180px;
-            flex: 1;
-            overflow: auto;
-        }
-        .result-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 8px 10px;
-            border-radius: 6px;
-            background: #f7f7f7;
+
+        .page-title h1 {
             margin-bottom: 8px;
+            font-size: clamp(2.2rem, 6vw, 4rem);
+            line-height: 1.05;
+            letter-spacing: -0.08em;
         }
-        .result-row:last-child { margin-bottom: 0; }
-        .result-checkbox { width: 16px; height: 16px; }
-        .result-text {
-            flex: 1;
-            font-size: 0.92rem;
-            color: #333;
-            cursor: pointer;
-            word-break: break-word;
+
+        .page-subtitle {
+            color: var(--muted);
+            font-size: 1rem;
+            line-height: 1.6;
         }
-        .result-input {
-            flex: 1;
-            padding: 8px 10px;
-            border: 2px solid #e0e0e0;
-            border-radius: 6px;
-            font-size: 0.92rem;
-            outline: none;
-        }
-        .result-input:focus { border-color: #667eea; }
-        .modal-actions {
+
+        .section-header {
             display: flex;
-            gap: 10px;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        .section-title {
+            font-size: 1.35rem;
+            letter-spacing: -0.03em;
+            text-align: center;
+        }
+
+        .section-desc {
+            color: var(--muted);
+            font-size: 0.94rem;
+            line-height: 1.6;
+        }
+
+        .module-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+
+        .module-card {
+            min-height: 210px;
+            border-radius: 20px;
+            padding: 22px;
+            display: flex;
+            flex-direction: column;
             justify-content: space-between;
+            color: inherit;
+            font: inherit;
+            text-align: left;
+            transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .module-card[href]:hover {
+            transform: translateY(-4px);
+            border-color: rgba(36, 107, 254, 0.32);
+            box-shadow: 0 18px 44px rgba(21, 54, 120, 0.16);
+        }
+
+        .module-card.placeholder {
+            cursor: not-allowed;
+            opacity: 0.56;
+            filter: grayscale(1);
+            box-shadow: none;
+            background: rgba(245, 247, 250, 0.8);
+            border-color: rgba(102, 112, 133, 0.18);
+        }
+
+        .module-card.placeholder .module-kicker {
+            color: #667085;
+            background: rgba(102, 112, 133, 0.12);
+        }
+
+        .module-card.placeholder .module-footer {
+            color: #98a2b3;
+        }
+
+        .module-kicker.available {
+            color: #027a48;
+            background: rgba(18, 161, 80, 0.14);
+        }
+
+        .module-kicker.developing {
+            color: #667085;
+            background: rgba(102, 112, 133, 0.12);
+        }
+
+        .module-kicker {
+            display: inline-flex;
+            width: fit-content;
+            padding: 5px 9px;
+            border-radius: 999px;
+            color: var(--primary-dark);
+            background: rgba(36, 107, 254, 0.1);
+            font-size: 0.78rem;
+            font-weight: 800;
+        }
+
+        .module-title {
+            margin: 18px 0 10px;
+            font-size: 1.18rem;
+            letter-spacing: -0.03em;
+        }
+
+        .module-desc {
+            color: var(--muted);
+            line-height: 1.65;
+            font-size: 0.94rem;
+        }
+
+        .module-footer {
+            margin-top: 20px;
+            color: var(--primary);
+            font-weight: 800;
+        }
+
+        .feedback-footer {
+            display: flex;
+            flex-direction: column;
             align-items: center;
-            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 26px;
         }
-        .modal-actions .output-buttons { margin-top: 0; }
-        .danger-btn {
-            background: #ff6b6b;
-            color: white;
-            border: none;
-            padding: 0 18px;
-            height: 38px;
-            border-radius: 6px;
+
+        .feedback-toggle {
+            min-height: 32px;
+            padding: 0 12px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.76);
+            color: var(--primary-dark);
+            font-size: 0.82rem;
+            font-weight: 700;
             cursor: pointer;
-            font-size: 0.9rem;
+            transition: transform 0.2s, box-shadow 0.2s;
         }
-        .danger-btn:hover { background: #ff5252; }
-        .result-add-btn {
+
+        .feedback-toggle:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 24px rgba(36, 107, 254, 0.12);
+        }
+
+        .feedback-panel {
+            display: none;
+            width: min(520px, 100%);
+            padding: 14px;
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            background: var(--card);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(16px);
+        }
+
+        .feedback-panel.show {
+            display: block;
+        }
+
+        .feedback-input {
             width: 100%;
-            border: 2px dashed #cfcfcf;
-            background: #fff;
-            border-radius: 8px;
-            padding: 10px 12px;
-            cursor: pointer;
-            font-size: 18px;
-            line-height: 1;
-            color: #667eea;
-            transition: border-color 0.2s, background-color 0.2s;
+            min-height: 92px;
+            padding: 12px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 14px;
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.82);
+            font: inherit;
+            line-height: 1.6;
+            resize: vertical;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
-        .result-add-btn:hover { border-color: #667eea; background: #f6f7ff; }
-        @media (max-width: 768px) {
-            .top-actions { flex-direction: column; align-items: stretch; }
-            .columns-wrapper { flex-direction: column; }
-            .column { min-width: 100%; }
+
+        .feedback-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(36, 107, 254, 0.1);
+        }
+
+        .feedback-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .feedback-submit {
+            min-height: 34px;
+            padding: 0 14px;
+            border: 1px solid var(--primary);
+            border-radius: 12px;
+            background: var(--primary);
+            color: #fff;
+            font-size: 0.86rem;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .toast {
+            position: fixed;
+            left: 50%;
+            bottom: 28px;
+            transform: translateX(-50%) translateY(20px);
+            padding: 12px 18px;
+            border-radius: 999px;
+            background: rgba(22, 32, 51, 0.92);
+            color: #fff;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s, transform 0.2s;
+            z-index: 10;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        @media (max-width: 980px) {
+            .module-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 640px) {
+            .page {
+                width: min(100% - 24px, 1180px);
+                padding-top: 24px;
+            }
+
+            .section {
+                border-radius: 20px;
+                padding: 22px;
+            }
+
+            .module-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .section-header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>拆词加词助手</h1>
-        <div class="top-actions">
-            <button class="add-column-btn" id="addColumnBtn">点击新增一列</button>
+    <main class="page">
+        <header class="page-title">
+            <h1>带班首页</h1>
+            <p class="page-subtitle" id="todaySubtitle">今天是</p>
+        </header>
 
+        <section class="section" id="modules">
+            <div class="section-header">
+                <div>
+                    <h2 class="section-title">功能入口</h2>
+                    <p class="section-desc">核心功能先以入口形式呈现，自动排班和拆词加词助手为当前可用功能。</p>
+                </div>
+            </div>
 
-            <div class="top-actions-right">
-                <button class="add-column-btn feishu-sheet-btn" id="feishuSheetBtn">飞书表格落表</button>
-                <button class="add-column-btn imc-rescan-btn" id="imcRescanBtn">IMC-GID回扫</button>
-                <button class="add-column-btn imc-rescan-btn" id="imcSRescanBtn">IMC-素材回扫</button>
-            </div>
-        </div>
-        <div class="columns-wrapper" id="columnsWrapper">
-            <div class="column" data-column-index="0">
-                <div class="column-header">
-                    <span class="column-title">第 1 列</span>
-                </div>
-                <div class="noun-list" id="nounList0"></div>
-                <div class="add-noun-input">
-                    <input type="text" class="noun-input" id="nounInput0" placeholder="输入需要排列组合的单个词语或词组后，回车或点击添加按钮">
-                    <button class="add-noun-btn" data-column="0">添加</button>
-                </div>
-            </div>
-            <div class="column" data-column-index="1">
-                <div class="column-header">
-                    <span class="column-title">第 2 列</span>
-                    <button class="column-remove" onclick="removeColumn(this)">×</button>
-                </div>
-                <div class="noun-list" id="nounList1"></div>
-                <div class="add-noun-input">
-                    <input type="text" class="noun-input" id="nounInput1" placeholder="输入需要排列组合的单个词语或词组后，回车或点击添加按钮">
-                    <button class="add-noun-btn" data-column="1">添加</button>
-                </div>
-            </div>
-        </div>
-        <div class="manual-wrapper">
-            <div class="column" id="manualColumn">
-                <div class="column-header">
-                    <span class="column-title">单独添加</span>
-                </div>
-                <div class="noun-list" id="manualList"></div>
-                <div class="add-noun-input">
-                    <input type="text" class="noun-input" id="manualKeywordInput" placeholder="输入需要单独添加的词语或词组">
-                    <button class="add-noun-btn" id="manualAddBtn">添加</button>
-                </div>
-            </div>
-        </div>
-        <div class="output-section">
-            <span class="output-label">词组预览</span>
-            <textarea class="output-textarea" id="outputTextarea" readonly></textarea>
-            <div class="output-buttons">
-                
-                <div class="generate-hover">
-                    <button class="copy-btn generate-btn" id="generateBtn">编辑并导出结果</button>
-                    <span class="generate-hint">（进入确认页面，导出前可对以上结果进行调整删改）</span>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal-overlay" id="resultModal">
-        <div class="modal" role="dialog" aria-modal="true">
-            <div class="modal-header">
-                <div class="modal-title">生成结果</div>
-                <button class="modal-close" id="resultModalCloseBtn">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="result-list" id="resultList"></div>
-                <div class="modal-actions">
-                    <button class="danger-btn" id="deleteSelectedBtn">删除选中</button>
-                    <div class="output-buttons">
-                        <button class="copy-btn" id="copyBtn">复制结果并跳转至业务安全平台</button>
-                        <button class="export-excel-btn" id="exportExcelBtn">导出文件并跳转至IMC加词</button>
+            <div class="module-grid">
+                <a class="module-card" href="shareable.html">
+                    <div>
+                        <span class="module-kicker available">可用功能</span>
+                        <h3 class="module-title">拆词加词助手</h3>
+                        <p class="module-desc">沿用当前可快捷处理指令的页面，作为带班首页下的子网页继续使用。</p>
                     </div>
-                </div>
-            </div>
+                    <span class="module-footer">立即打开 →</span>
+                </a>
 
-        </div>
-    </div>
+                <a class="module-card" href="schedule.html">
+                    <div>
+                        <span class="module-kicker available">可用功能</span>
+                        <h3 class="module-title">自动排班</h3>
+                        <p class="module-desc">支持多人员、跨月周期、班次/人员视图、固定偏好和候选排班方案生成。</p>
+                    </div>
+                    <span class="module-footer">立即打开 →</span>
+                </a>
+
+                <a class="module-card" href="web-tracker.html">
+                    <div>
+                        <span class="module-kicker developing">开发中</span>
+                        <h3 class="module-title">网页追踪</h3>
+                        <p class="module-desc">输入目标网页、监测区域和关键词，配置字节云函数后可创建后台监听任务。</p>
+                    </div>
+                    <span class="module-footer">打开配置 →</span>
+                </a>
+
+                <button class="module-card placeholder" type="button" data-feature="带班提示生成" disabled>
+                    <div>
+                        <span class="module-kicker developing">开发中</span>
+                        <h3 class="module-title">带班提示生成</h3>
+                        <p class="module-desc">预留基于飞书资料生成带班提示、注意事项和执行清单的入口。</p>
+                    </div>
+                    <span class="module-footer">等待配置 →</span>
+                </button>
+
+                <button class="module-card placeholder" type="button" data-feature="指令记录" disabled>
+                    <div>
+                        <span class="module-kicker developing">开发中</span>
+                        <h3 class="module-title">指令记录</h3>
+                        <p class="module-desc">预留查询、记录和追踪带班期间关键指令的入口。</p>
+                    </div>
+                    <span class="module-footer">等待配置 →</span>
+                </button>
+
+                <button class="module-card placeholder" type="button" data-feature="问答记录" disabled>
+                    <div>
+                        <span class="module-kicker developing">开发中</span>
+                        <h3 class="module-title">问答记录</h3>
+                        <p class="module-desc">预留沉淀常见问题、处理口径和历史问答资料的入口。</p>
+                    </div>
+                    <span class="module-footer">等待配置 →</span>
+                </button>
+            </div>
+        </section>
+
+        <footer class="feedback-footer">
+            <button class="feedback-toggle" type="button" id="feedbackToggle">问题反馈</button>
+            <form class="feedback-panel" id="feedbackPanel">
+                <textarea class="feedback-input" id="feedbackInput" placeholder="请输入你遇到的问题或建议"></textarea>
+                <div class="feedback-actions">
+                    <button class="feedback-submit" type="submit">提交</button>
+                </div>
+            </form>
+        </footer>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script>
-        const MAX_COLUMNS = 5;
-        let columnCount = 2;
-        let manualKeywords = [];
-        let modalLines = [];
+        const toast = document.getElementById('toast');
+        const placeholders = document.querySelectorAll('[data-feature]');
+        const todaySubtitle = document.getElementById('todaySubtitle');
+        const feedbackToggle = document.getElementById('feedbackToggle');
+        const feedbackPanel = document.getElementById('feedbackPanel');
+        const feedbackInput = document.getElementById('feedbackInput');
+        let toastTimer = null;
 
-        function addManualKeyword() {
-            const input = document.getElementById('manualKeywordInput');
-            const keyword = input.value.trim();
-            if (!keyword) return;
-            manualKeywords.push(keyword);
-            const list = document.getElementById('manualList');
-            const item = document.createElement('div');
-            item.className = 'noun-item';
-            item.innerHTML = `<span class="noun-text">${keyword}</span><button class="noun-remove" onclick="removeManualKeyword(this, '${keyword}')">×</button>`;
-            list.appendChild(item);
-            input.value = '';
-            input.focus();
-            updateOutput();
+        function renderToday() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            todaySubtitle.textContent = `今天是${year}年${month}月${day}日`;
         }
 
-        function removeManualKeyword(btn, keyword) {
-            btn.parentElement.remove();
-            manualKeywords = manualKeywords.filter(k => k !== keyword);
-            updateOutput();
+        function showToast(message) {
+            toast.textContent = message;
+            toast.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
         }
 
-        function updateOutput() {
-            const columns = document.querySelectorAll('.column:not(#manualColumn)');
-            const nounLists = [];
-            columns.forEach(col => {
-                const items = col.querySelectorAll('.noun-item');
-                const nouns = Array.from(items).map(item => item.querySelector('.noun-text').textContent);
-                if (nouns.length > 0) nounLists.push(nouns);
-            });
-            let result = [];
-            if (manualKeywords.length > 0) result = [...manualKeywords];
-            if (nounLists.length > 0) {
-                const combinations = cartesianProduct(nounLists);
-                const combinationStrings = combinations.map(row => row.join(','));
-                result = [...result, ...combinationStrings];
-            }
-            document.getElementById('outputTextarea').value = result.join('\n');
-        }
-
-        function addNoun(columnIndex) {
-            const input = document.getElementById(`nounInput${columnIndex}`);
-            const noun = input.value.trim();
-            if (!noun) return;
-            const list = document.getElementById(`nounList${columnIndex}`);
-            const item = document.createElement('div');
-            item.className = 'noun-item';
-            item.innerHTML = `<span class="noun-text">${noun}</span><button class="noun-remove" onclick="removeNoun(this)">×</button>`;
-            list.appendChild(item);
-            input.value = '';
-            input.focus();
-            updateOutput();
-        }
-
-        function removeNoun(btn) {
-            btn.parentElement.remove();
-            updateOutput();
-        }
-
-        function addColumn() {
-            if (columnCount >= MAX_COLUMNS) return;
-            columnCount++;
-            const wrapper = document.getElementById('columnsWrapper');
-            const column = document.createElement('div');
-            column.className = 'column';
-            column.dataset.columnIndex = columnCount - 1;
-            column.innerHTML = `<div class="column-header"><span class="column-title">第 ${columnCount} 列</span><button class="column-remove" onclick="removeColumn(this)">×</button></div><div class="noun-list" id="nounList${columnCount - 1}"></div><div class="add-noun-input"><input type="text" class="noun-input" id="nounInput${columnCount - 1}" placeholder="输入名词"><button class="add-noun-btn" data-column="${columnCount - 1}">添加</button></div>`;
-            wrapper.appendChild(column);
-            if (columnCount >= MAX_COLUMNS) document.getElementById('addColumnBtn').disabled = true;
-        }
-
-        function removeColumn(btn) {
-            btn.parentElement.parentElement.remove();
-            columnCount--;
-            document.getElementById('addColumnBtn').disabled = false;
-            const columns = document.querySelectorAll('.column:not(#manualColumn)');
-            columns.forEach((col, index) => {
-                col.dataset.columnIndex = index;
-                col.querySelector('.column-title').textContent = `第 ${index + 1} 列`;
-            });
-            updateOutput();
-        }
-
-        function cartesianProduct(arrays) {
-            return arrays.reduce((acc, arr) => acc.flatMap(a => arr.map(b => [...a, b])), [[]]);
-        }
-
-        function getOutputLines() {
-            const textarea = document.getElementById('outputTextarea');
-            return textarea.value.split('\n').map(s => s.trim()).filter(Boolean);
-        }
-
-        function setOutputLines(lines) {
-            document.getElementById('outputTextarea').value = lines.join('\n');
-        }
-
-        function renderModalList() {
-            const container = document.getElementById('resultList');
-            container.innerHTML = '';
-            modalLines.forEach((line, index) => {
-                const row = document.createElement('div');
-                row.className = 'result-row';
-                row.innerHTML = `
-                    <input class="result-checkbox" type="checkbox" data-index="${index}">
-                    <span class="result-text" data-index="${index}"></span>
-                `;
-                row.querySelector('.result-text').textContent = line;
-                container.appendChild(row);
-            });
-
-            const addBtn = document.createElement('button');
-            addBtn.type = 'button';
-            addBtn.className = 'result-add-btn';
-            addBtn.id = 'resultAddBtn';
-            addBtn.textContent = '+';
-            container.appendChild(addBtn);
-        }
-
-        function openResultModal() {
-            modalLines = getOutputLines();
-            renderModalList();
-            document.getElementById('resultModal').classList.add('show');
-        }
-
-        function closeResultModal() {
-            document.getElementById('resultModal').classList.remove('show');
-        }
-
-        function deleteSelectedLines() {
-            const checks = Array.from(document.querySelectorAll('#resultList .result-checkbox:checked'));
-            if (checks.length === 0) return;
-            const indices = new Set(checks.map(c => Number(c.dataset.index)));
-            modalLines = modalLines.filter((_, i) => !indices.has(i));
-            setOutputLines(modalLines);
-            renderModalList();
-        }
-
-        function startEditLine(index) {
-            const rows = document.querySelectorAll('#resultList .result-row');
-            const row = rows[index];
-            if (!row) return;
-            const textEl = row.querySelector('.result-text');
-            if (!textEl) return;
-            const current = modalLines[index] ?? '';
-            const input = document.createElement('input');
-            input.className = 'result-input';
-            input.value = current;
-            textEl.replaceWith(input);
-            input.focus();
-            input.setSelectionRange(input.value.length, input.value.length);
-
-            const commit = () => {
-                const value = input.value.trim();
-                if (!value) {
-                    modalLines.splice(index, 1);
-                } else {
-                    modalLines[index] = value;
-                }
-                setOutputLines(modalLines);
-                renderModalList();
-            };
-
-            input.addEventListener('blur', commit, { once: true });
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') commit();
-                if (e.key === 'Escape') renderModalList();
-            });
-        }
-
-        function addTempLine() {
-            modalLines.push('');
-            renderModalList();
-            startEditLine(modalLines.length - 1);
-        }
-
-        function copyResult() {
-            const textarea = document.getElementById('outputTextarea');
-            if (!textarea.value) return;
-            navigator.clipboard.writeText(textarea.value).then(() => {
-                const btn = document.getElementById('copyBtn');
-                btn.textContent = '已复制';
-                btn.classList.add('copied');
-                setTimeout(() => { btn.textContent = '复制结果并跳转至业务安全平台'; btn.classList.remove('copied'); }, 2000);
-                window.open('https://safe.bytedance.net/strategy/antidirt2/tag_list/detail/6180', '_blank');
-            });
-        }
-
-        function exportToExcel() {
-            if (!window.XLSX || !XLSX.utils) {
-                alert('导出失败：未能加载 XLSX 依赖，请检查网络或稍后重试');
-                return;
-            }
-
-            const lines = getOutputLines();
-            if (lines.length === 0) {
-                alert('导出结果为空');
-                return;
-            }
-            const expireDate = new Date();
-            expireDate.setMonth(expireDate.getMonth() + 1);
-            const year = expireDate.getFullYear();
-            const month = String(expireDate.getMonth() + 1).padStart(2, '0');
-            const day = String(expireDate.getDate()).padStart(2, '0');
-            const hours = String(expireDate.getHours()).padStart(2, '0');
-            const minutes = String(expireDate.getMinutes()).padStart(2, '0');
-            const seconds = String(expireDate.getSeconds()).padStart(2, '0');
-            const expireTime = `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
-
-            const worksheetData = [];
-            worksheetData.push(['stop_keyword', 'expire_time']);
-            lines.forEach(keyword => {
-                worksheetData.push([keyword, expireTime]);
-            });
-
-            const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, '拆词表');
-
-            const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-            const blob = new Blob([wbout], {
-                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            });
-            const blobUrl = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = blobUrl;
-            a.download = '拆词表.xlsx';
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            URL.revokeObjectURL(blobUrl);
-
-            setTimeout(() => {
-                window.open('https://bee.bytedance.net/1533/combine-imc/16410/data', '_blank');
-            }, 150);
-        }
-
-        function openFeishuSheet() {
-            window.open('https://bytedance.larkoffice.com/sheets/X3lzs3LKOhsJ1Bth11Cc7wXvndf', '_blank');
-        }
-
-        function openImcRescan() {
-            const now = new Date();
-            const startMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0).getTime();
-            const endMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0).getTime() - 1;
-            const url = new URL('https://imc.bytedance.net/tools/push-intercept/material-group');
-            url.searchParams.set('curAppId', '1128');
-            url.searchParams.set('isNewTask', '0');
-            url.searchParams.set('startCreateTime', String(startMs));
-            url.searchParams.set('endCreateTime', String(endMs));
-            url.searchParams.set('pageNum', '1');
-            window.open(url.toString(), '_blank');
-        }
-        function openImcSRescan() {
-            const now = new Date();
-            const startMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0).getTime();
-            const endMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0).getTime() - 1;
-            const url = new URL('https://imc.bytedance.net/tools/push-intercept/material-intercept');
-            url.searchParams.set('curAppId', '1128');
-            url.searchParams.set('isNewTask', '0');
-            url.searchParams.set('startCreateTime', String(startMs));
-            url.searchParams.set('endCreateTime', String(endMs));
-            url.searchParams.set('pageNum', '1');
-            window.open(url.toString(), '_blank');
-        }
-        document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('addColumnBtn').addEventListener('click', addColumn);
-            document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
-            document.getElementById('copyBtn').addEventListener('click', copyResult);
-            document.getElementById('feishuSheetBtn').addEventListener('click', openFeishuSheet);
-            document.getElementById('imcRescanBtn').addEventListener('click', openImcRescan);
-            document.getElementById('imcSRescanBtn').addEventListener('click', openImcSRescan);
-            document.getElementById('manualAddBtn').addEventListener('click', addManualKeyword);
-            document.getElementById('generateBtn').addEventListener('click', openResultModal);
-            document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelectedLines);
-            document.getElementById('resultModalCloseBtn').addEventListener('click', closeResultModal);
-            document.getElementById('resultModal').addEventListener('click', (e) => {
-                if (e.target && e.target.id === 'resultModal') closeResultModal();
-            });
-            document.getElementById('resultList').addEventListener('click', (e) => {
-                const addBtn = e.target.closest('#resultAddBtn');
-                if (addBtn) {
-                    addTempLine();
-                    return;
-                }
-                const el = e.target.closest('.result-text');
-                if (!el) return;
-                startEditLine(Number(el.dataset.index));
-            });
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') closeResultModal();
-            });
-            document.addEventListener('click', (e) => {
-                const btn = e.target.closest('.add-noun-btn');
-                if (btn && btn.id !== 'manualAddBtn') {
-                    const columnIndex = parseInt(btn.dataset.column);
-                    addNoun(columnIndex);
-                }
-            });
-            document.addEventListener('keydown', (e) => {
-                if (e.target.classList.contains('noun-input') && e.key === 'Enter') {
-                    if (e.target.id === 'manualKeywordInput') addManualKeyword();
-                    else {
-                        const columnIndex = parseInt(e.target.id.replace('nounInput', ''));
-                        addNoun(columnIndex);
-                    }
-                }
+        placeholders.forEach((item) => {
+            item.addEventListener('click', () => {
+                showToast(`${item.dataset.feature}入口已预留，待飞书数据源完善后接入。`);
             });
         });
+
+        feedbackToggle.addEventListener('click', () => {
+            feedbackPanel.classList.toggle('show');
+            if (feedbackPanel.classList.contains('show')) {
+                feedbackInput.focus();
+            }
+        });
+
+        feedbackPanel.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const content = feedbackInput.value.trim();
+            if (!content) {
+                showToast('请先填写反馈内容');
+                return;
+            }
+
+            const subject = encodeURIComponent('带班首页问题反馈');
+            const body = encodeURIComponent(`反馈内容：\n${content}\n\n页面：带班首页\n提交时间：${new Date().toLocaleString()}`);
+            window.location.href = `mailto:lixun.hmd@jiyunhudong.com?subject=${subject}&body=${body}`;
+            feedbackInput.value = '';
+            feedbackPanel.classList.remove('show');
+            showToast('已打开邮件客户端，请确认发送');
+        });
+
+        renderToday();
     </script>
 </body>
 </html>
