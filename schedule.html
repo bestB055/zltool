@@ -970,6 +970,8 @@
             { id: 'normal', name: '常' },
             { id: 'night', name: '晚' },
         ];
+        const preferredWorkDays = 21;
+        const maximumWorkDays = 22;
 
         const state = {
             viewMode: 'shift',
@@ -1069,7 +1071,7 @@
         }
 
         function renderRange() {
-            rangeText.textContent = `默认周期：${dates[0].full} 至 ${dates[dates.length - 1].full}。工作日至少 7 人在班，周末至少 6 人，周一/周三固定按 9 人配置；早晚班优先均分。`;
+            rangeText.textContent = `默认周期：${dates[0].full} 至 ${dates[dates.length - 1].full}。工作日至少 7 人，周末至少 6 人，周一/周三按 9 人配置；每人优先排 21 天，最多 22 天。`;
         }
 
         function getDateConfig(dateKey) {
@@ -1579,7 +1581,7 @@
                     <div class="solution-card${index === state.activeSolutionIndex ? ' active' : ''}">
                         <div>
                             <strong>方案 ${index + 1}</strong>
-                            <p class="muted">满足 ${solution.filled} 个在班坑位，评分 ${solution.score}</p>
+                            <p class="muted">共 ${solution.filled} 个在班坑位，个人 ${solution.minWorkDays}-${solution.maxWorkDays} 天，评分 ${solution.score}</p>
                         </div>
                         <button class="btn ghost" type="button" data-solution-index="${index}">查看</button>
                     </div>
@@ -1687,6 +1689,10 @@
                 shifts.forEach((shift) => assignments[date.key][shift.id] ||= []);
             });
 
+            if (state.people.some((person) => getWorkDays(assignments, person.id) > maximumWorkDays)) {
+                return null;
+            }
+
             for (const date of dates) {
                 const planOptions = getDateConfig(date.key).options;
                 let scheduled = false;
@@ -1705,11 +1711,19 @@
                 }
             }
 
+            balanceMonthlyWorkload(assignments, seed);
+            if (!isScheduleValid(assignments)) {
+                return null;
+            }
+
             const score = scoreSchedule(assignments);
+            const loads = state.people.map((person) => getWorkDays(assignments, person.id));
             return {
                 assignments,
-                filled: dates.reduce((sum, date) => sum + getDateConfig(date.key).required, 0),
-                score,
+                filled: countAssignedSlots(assignments),
+                score: Math.round(score),
+                minWorkDays: Math.min(...loads),
+                maxWorkDays: Math.max(...loads),
             };
         }
 
@@ -1725,12 +1739,6 @@
             const fillOrder = ['night', 'morning', 'normal'];
 
             for (const shiftId of fillOrder) {
-                if ((assignments[dateKey][shiftId] || []).length > plan[shiftId]) {
-                    return false;
-                }
-            }
-
-            for (const shiftId of fillOrder) {
                 while ((assignments[dateKey][shiftId] || []).length < plan[shiftId]) {
                     const candidate = pickCandidate(assignments, dateKey, shiftId, seed + fillOrder.indexOf(shiftId));
                     if (!candidate) {
@@ -1741,6 +1749,116 @@
             }
 
             return true;
+        }
+
+        function balanceMonthlyWorkload(assignments, seed) {
+            let madeProgress = true;
+            let pass = 0;
+
+            while (madeProgress && pass < preferredWorkDays) {
+                madeProgress = false;
+                pass += 1;
+                const people = shuffle([...state.people], seed + pass)
+                    .sort((a, b) => getWorkDays(assignments, a.id) - getWorkDays(assignments, b.id));
+
+                people.forEach((person) => {
+                    if (getWorkDays(assignments, person.id) >= preferredWorkDays) {
+                        return;
+                    }
+
+                    const option = findSupplementAssignment(assignments, person.id, seed + pass);
+                    if (!option) {
+                        return;
+                    }
+
+                    assignments[option.dateKey][option.shiftId].push(person.id);
+                    madeProgress = true;
+                });
+            }
+        }
+
+        function findSupplementAssignment(assignments, personId, seed) {
+            const options = [];
+
+            dates.forEach((date, dateIndex) => {
+                if (isWorking(assignments, personId, date.key)) {
+                    return;
+                }
+
+                ['morning', 'night'].forEach((shiftId) => {
+                    if (!canAssign(assignments, personId, date.key, shiftId)) {
+                        return;
+                    }
+
+                    const morningCount = assignments[date.key]?.morning?.length || 0;
+                    const nightCount = assignments[date.key]?.night?.length || 0;
+                    const nextMorning = morningCount + (shiftId === 'morning' ? 1 : 0);
+                    const nextNight = nightCount + (shiftId === 'night' ? 1 : 0);
+                    const totalOnDuty = shifts.reduce(
+                        (sum, shift) => sum + (assignments[date.key]?.[shift.id]?.length || 0),
+                        0,
+                    );
+
+                    options.push({
+                        dateKey: date.key,
+                        shiftId,
+                        balancePenalty: Math.abs(nextMorning - nextNight),
+                        totalOnDuty,
+                        tieBreaker: (dateIndex + seed + personId.length + shiftId.length) % dates.length,
+                    });
+                });
+            });
+
+            options.sort((a, b) =>
+                (a.balancePenalty - b.balancePenalty)
+                || (a.totalOnDuty - b.totalOnDuty)
+                || (a.tieBreaker - b.tieBreaker)
+            );
+            return options[0] || null;
+        }
+
+        function countAssignedSlots(assignments) {
+            return dates.reduce((total, date) =>
+                total + shifts.reduce(
+                    (dayTotal, shift) => dayTotal + (assignments[date.key]?.[shift.id]?.length || 0),
+                    0,
+                ),
+            0);
+        }
+
+        function isScheduleValid(assignments) {
+            return state.people.every((person) => {
+                const workDays = getWorkDays(assignments, person.id);
+                if (workDays < preferredWorkDays || workDays > maximumWorkDays) {
+                    return false;
+                }
+
+                let consecutiveDays = 0;
+                for (let index = 0; index < dates.length; index += 1) {
+                    const dateKey = dates[index].key;
+                    const assignedShifts = shifts.filter((shift) =>
+                        assignments[dateKey]?.[shift.id]?.includes(person.id)
+                    );
+                    if (assignedShifts.length > 1) {
+                        return false;
+                    }
+
+                    consecutiveDays = assignedShifts.length ? consecutiveDays + 1 : 0;
+                    if (consecutiveDays > 6) {
+                        return false;
+                    }
+
+                    if (
+                        assignments[dateKey]?.night?.includes(person.id)
+                        && index < dates.length - 1
+                        && assignments[dates[index + 1].key]?.morning?.includes(person.id)
+                    ) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
         }
 
         function pickCandidate(assignments, dateKey, shiftId, seed) {
@@ -1757,6 +1875,9 @@
             if (rule.vacation) {
                 return false;
             }
+            if (getWorkDays(assignments, personId) >= maximumWorkDays) {
+                return false;
+            }
             if (rule.allow.size && !rule.allow.has('all') && !rule.allow.has(shiftId)) {
                 return false;
             }
@@ -1769,10 +1890,10 @@
             if (shiftId === 'morning' && hadShiftPreviousDay(assignments, personId, dateKey, 'night')) {
                 return false;
             }
-            if (wouldExceedSixConsecutive(assignments, personId, dateKey)) {
+            if (shiftId === 'night' && hasShiftNextDay(assignments, personId, dateKey, 'morning')) {
                 return false;
             }
-            if (wouldExceedFiveInSeven(assignments, personId, dateKey)) {
+            if (wouldExceedSixConsecutive(assignments, personId, dateKey)) {
                 return false;
             }
             return true;
@@ -1787,6 +1908,15 @@
             return assignments[prevKey]?.[shiftId]?.includes(personId);
         }
 
+        function hasShiftNextDay(assignments, personId, dateKey, shiftId) {
+            const index = dates.findIndex((date) => date.key === dateKey);
+            if (index < 0 || index >= dates.length - 1) {
+                return false;
+            }
+            const nextKey = dates[index + 1].key;
+            return assignments[nextKey]?.[shiftId]?.includes(personId);
+        }
+
         function wouldExceedSixConsecutive(assignments, personId, dateKey) {
             const index = dates.findIndex((date) => date.key === dateKey);
             let count = 1;
@@ -1799,24 +1929,6 @@
                 else break;
             }
             return count > 6;
-        }
-
-        function wouldExceedFiveInSeven(assignments, personId, dateKey) {
-            const index = dates.findIndex((date) => date.key === dateKey);
-            const start = Math.max(0, index - 6);
-            const end = Math.min(dates.length - 1, index + 6);
-            for (let windowStart = start; windowStart <= index && windowStart + 6 <= end; windowStart += 1) {
-                let count = 0;
-                for (let i = windowStart; i < windowStart + 7; i += 1) {
-                    if (dates[i].key === dateKey || isWorking(assignments, personId, dates[i].key)) {
-                        count += 1;
-                    }
-                }
-                if (count > 5) {
-                    return true;
-                }
-            }
-            return false;
         }
 
         function isWorking(assignments, personId, dateKey) {
@@ -1836,23 +1948,19 @@
             const loads = state.people.map((person) => getWorkDays(assignments, person.id));
             const max = Math.max(...loads);
             const min = Math.min(...loads);
-            const fairnessPenalty = (max - min) * 8;
+            const targetPenalty = loads.reduce(
+                (sum, load) => sum + Math.abs(preferredWorkDays - load) * 6,
+                0,
+            );
+            const fairnessPenalty = (max - min) * 4;
             const planPenalty = dates.reduce((sum, date) => {
-                const options = getDateConfig(date.key).options;
-                const current = {
-                    morning: assignments[date.key]?.morning?.length || 0,
-                    normal: assignments[date.key]?.normal?.length || 0,
-                    night: assignments[date.key]?.night?.length || 0,
-                };
-                const planIndex = options.findIndex((option) =>
-                    option.morning === current.morning
-                    && option.normal === current.normal
-                    && option.night === current.night
-                );
-                return sum + (planIndex === -1 ? options.length : planIndex);
+                const morning = assignments[date.key]?.morning?.length || 0;
+                const normal = assignments[date.key]?.normal?.length || 0;
+                const night = assignments[date.key]?.night?.length || 0;
+                return sum + Math.abs(morning - night) + (normal * 0.5);
             }, 0);
-            const normalizedPlanPenalty = (planPenalty / dates.length) * 6;
-            return Math.max(0, 100 - fairnessPenalty - normalizedPlanPenalty);
+            const normalizedPlanPenalty = (planPenalty / dates.length) * 4;
+            return Math.max(0, 100 - targetPenalty - fairnessPenalty - normalizedPlanPenalty);
         }
 
         function cloneLockedAssignments() {
