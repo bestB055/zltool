@@ -259,14 +259,21 @@
 
         .date-rule-list {
             display: flex;
-            flex-wrap: wrap;
+            flex-direction: column;
+            align-items: stretch;
+            width: 100%;
+            min-width: 0;
             gap: 4px;
             margin-top: 6px;
         }
 
         .date-rule-pill {
-            display: inline-flex;
+            display: flex;
             align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            min-width: 0;
+            max-width: 100%;
             gap: 4px;
             padding: 3px 6px;
             border: 0;
@@ -276,6 +283,8 @@
             font-size: 0.7rem;
             font-weight: 900;
             line-height: 1.2;
+            overflow-wrap: anywhere;
+            white-space: normal;
         }
 
         .date-rule-pill.blocked {
@@ -701,6 +710,15 @@
             color: #b42318;
         }
 
+        .mode-tab:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .mode-tab.active.block:disabled {
+            opacity: 1;
+        }
+
         .inline-date-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
@@ -902,7 +920,7 @@
 <body>
     <main class="page">
         <div class="topbar">
-            <a class="back-link" href="index.html">返回带班首页</a>
+            <a class="back-link" href="home.html">返回带班首页</a>
         </div>
 
         <section class="hero">
@@ -1123,6 +1141,7 @@
                 const active = person.id === state.openPersonId ? ' active' : '';
                 const currentShift = getPreferenceShift(person.id);
                 const currentMode = getPreferenceMode(person.id);
+                const isRestMode = currentShift === 'rest';
                 return `
                     <article class="person-card${active}" data-person-id="${person.id}">
                         <button class="person-card-header" type="button" data-person-toggle="${person.id}">
@@ -1157,8 +1176,8 @@
                                     </button>
                                 </div>
                                 <div class="mode-tabs" aria-label="固定类型">
-                                    <button class="mode-tab work${currentMode === 'work' ? ' active' : ''}" type="button" data-pref-mode="work" data-person="${person.id}">固定上</button>
-                                    <button class="mode-tab block${currentMode === 'block' ? ' active' : ''}" type="button" data-pref-mode="block" data-person="${person.id}">固定不上</button>
+                                    <button class="mode-tab work${!isRestMode && currentMode === 'work' ? ' active' : ''}" type="button" data-pref-mode="work" data-person="${person.id}"${isRestMode ? ' disabled' : ''}>固定上</button>
+                                    <button class="mode-tab block${isRestMode || currentMode === 'block' ? ' active' : ''}" type="button" data-pref-mode="block" data-person="${person.id}"${isRestMode ? ' disabled' : ''}>固定不上</button>
                                 </div>
                                 <div class="inline-date-grid">
                                     ${dates.map((date) => renderPreferenceDate(person.id, date, currentShift, currentMode)).join('')}
@@ -2106,6 +2125,9 @@
             if (modeButton) {
                 event.preventDefault();
                 event.stopPropagation();
+                if (getPreferenceShift(modeButton.dataset.person) === 'rest') {
+                    return;
+                }
                 state.selectedPersonId = modeButton.dataset.person;
                 state.openPersonId = modeButton.dataset.person;
                 state.preferenceModes[modeButton.dataset.person] = modeButton.dataset.prefMode;
