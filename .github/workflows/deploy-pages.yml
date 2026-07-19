@@ -39,7 +39,8 @@ jobs:
         run: |
           mkdir -p site
           cp home.html index.html schedule.html web-tracker.html app-config.js site/
-          printf 'window.DAIBAN_HOME_CONFIG = {\n    DOUBAO_SEARCH_API_URL: %s,\n};\n' "'$DOUBAO_SEARCH_API_URL'" > site/app-config.js
+          URL="$(printf '%s' "$DOUBAO_SEARCH_API_URL" | sed 's/^`//;s/`$//;s/^"//;s/"$//;s/^'"'"'//;s/'"'"'$//')"
+          printf 'window.DAIBAN_HOME_CONFIG = {\n    DOUBAO_SEARCH_API_URL: %s,\n};\n' "'$URL'" > site/app-config.js
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
