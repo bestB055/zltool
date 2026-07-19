@@ -39,19 +39,7 @@ jobs:
         run: |
           mkdir -p site
           cp home.html index.html schedule.html web-tracker.html app-config.js site/
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          value = os.environ.get('DOUBAO_SEARCH_API_URL', '').strip().strip('`')
-          Path('site/app-config.js').write_text(
-              "window.DAIBAN_HOME_CONFIG = {\n"
-              f"    DOUBAO_SEARCH_API_URL: {json.dumps(value, ensure_ascii=False)},\n"
-              "};\n",
-              encoding='utf-8',
-          )
-          PY
+          printf 'window.DAIBAN_HOME_CONFIG = {\n    DOUBAO_SEARCH_API_URL: %s,\n};\n' "'$DOUBAO_SEARCH_API_URL'" > site/app-config.js
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
