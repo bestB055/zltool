@@ -45,9 +45,9 @@ jobs:
 
           value = os.environ.get('DOUBAO_SEARCH_API_URL', '').replace('\\', '\\\\').replace("'", "\\'")
           Path('site/app-config.js').write_text(
-              "window.DAIBAN_HOME_CONFIG = {\\n"
-              f"    DOUBAO_SEARCH_API_URL: '{value}',\\n"
-              "};\\n",
+              "window.DAIBAN_HOME_CONFIG = {\n"
+              f"    DOUBAO_SEARCH_API_URL: '{value}',\n"
+              "};\n",
               encoding='utf-8',
           )
           PY
