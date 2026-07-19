@@ -1,0 +1,43 @@
+name: Deploy Cloudflare Worker
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'cloudflare-worker/**'
+      - '.github/workflows/deploy-worker.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply allowed origin
+        if: ${{ vars.ALLOWED_ORIGIN != '' }}
+        working-directory: cloudflare-worker
+        env:
+          ALLOWED_ORIGIN: ${{ vars.ALLOWED_ORIGIN }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          path = Path('wrangler.toml')
+          value = os.environ['ALLOWED_ORIGIN'].replace('\\', '\\\\').replace('"', '\\"')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('ALLOWED_ORIGIN = ""', f'ALLOWED_ORIGIN = "{value}"')
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloudflare-worker
+          command: deploy

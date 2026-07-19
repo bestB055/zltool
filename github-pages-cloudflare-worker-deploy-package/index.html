@@ -1,0 +1,1586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>拆词加词助手</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-start: #eef4ff;
+            --bg-end: #f8fbff;
+            --primary: #246bfe;
+            --primary-dark: #1749b6;
+            --text: #162033;
+            --muted: #667085;
+            --card: rgba(255, 255, 255, 0.88);
+            --border: rgba(36, 107, 254, 0.12);
+            --shadow: 0 20px 60px rgba(21, 54, 120, 0.12);
+            --soft-shadow: 0 12px 34px rgba(21, 54, 120, 0.08);
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(36, 107, 254, 0.18), transparent 32%),
+                linear-gradient(135deg, var(--bg-start), var(--bg-end));
+            min-height: 100vh;
+            padding: 42px 0 56px;
+        }
+        .container {
+            width: min(1180px, calc(100% - 32px));
+            margin: 0 auto;
+        }
+        .tool-header {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 28px;
+            padding: 30px 34px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(16px);
+            position: relative;
+            overflow: hidden;
+        }
+        .tool-header::after {
+            content: "";
+            position: absolute;
+            right: -70px;
+            bottom: -90px;
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            background: rgba(36, 107, 254, 0.1);
+        }
+        .home-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            width: fit-content;
+            color: var(--primary-dark);
+            text-decoration: none;
+            font-weight: 700;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
+            transition: transform 0.2s;
+        }
+        .home-link:hover {
+            transform: translateX(-2px);
+        }
+        h1 {
+            max-width: 680px;
+            margin-bottom: 10px;
+            font-size: clamp(2rem, 5vw, 3.8rem);
+            line-height: 1.05;
+            letter-spacing: -0.08em;
+            position: relative;
+            z-index: 1;
+        }
+        .tool-subtitle {
+            max-width: 660px;
+            color: var(--muted);
+            font-size: 1rem;
+            line-height: 1.75;
+            position: relative;
+            z-index: 1;
+        }
+        .ai-generator {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: var(--soft-shadow);
+            backdrop-filter: blur(16px);
+        }
+        .ai-generator-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .ai-generator-title {
+            font-size: 1.15rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+        .ai-generator-desc,
+        .ai-generator-status {
+            color: var(--muted);
+            font-size: 0.86rem;
+            line-height: 1.6;
+        }
+        .ai-generator-grid {
+            display: grid;
+            gap: 14px;
+        }
+        .news-source-input {
+            width: 100%;
+            min-height: 220px;
+            padding: 15px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.78);
+            color: var(--text);
+            font: inherit;
+            line-height: 1.65;
+            resize: vertical;
+            outline: none;
+        }
+        .news-source-input:focus,
+        .api-key-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(36, 107, 254, 0.1);
+        }
+        .api-key-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+        }
+        .api-key-group {
+            display: grid;
+            gap: 6px;
+        }
+        .api-key-label {
+            color: var(--text);
+            font-size: 0.82rem;
+            font-weight: 800;
+        }
+        .api-key-input {
+            width: 100%;
+            min-height: 42px;
+            padding: 0 13px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.82);
+            color: var(--text);
+            outline: none;
+        }
+        .ai-generator-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .ai-generate-btn:disabled {
+            cursor: wait;
+            opacity: 0.65;
+            transform: none;
+            box-shadow: none;
+        }
+        .api-key-saved {
+            color: #027a48;
+        }
+        .ai-generator-status.error {
+            color: #b42318;
+        }
+        .ai-candidates {
+            display: none;
+            margin-bottom: 24px;
+            padding: 24px;
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            background: var(--card);
+            box-shadow: var(--soft-shadow);
+        }
+        .ai-candidates.show { display: block; }
+        .candidate-tier {
+            margin-top: 16px;
+            overflow: hidden;
+            border: 1px solid rgba(36, 107, 254, 0.12);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.62);
+        }
+        .candidate-tier-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px;
+        }
+        .candidate-tier.high .candidate-tier-header { background: rgba(18, 161, 80, 0.12); }
+        .candidate-tier.medium .candidate-tier-header { background: rgba(247, 144, 9, 0.14); }
+        .candidate-tier.low .candidate-tier-header { background: rgba(217, 45, 32, 0.1); }
+        .candidate-tier-title { font-weight: 900; }
+        .candidate-tier-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .candidate-tier-actions button {
+            padding: 5px 9px;
+            border: 1px solid rgba(36, 107, 254, 0.15);
+            border-radius: 9px;
+            background: #fff;
+            color: var(--primary-dark);
+            cursor: pointer;
+            font-size: 0.76rem;
+            font-weight: 800;
+        }
+        .candidate-list {
+            display: grid;
+            gap: 8px;
+            padding: 12px;
+        }
+        .candidate-row {
+            display: grid;
+            grid-template-columns: auto minmax(130px, 1fr) minmax(220px, 2fr);
+            gap: 10px;
+            align-items: center;
+            padding: 11px 12px;
+            border: 1px solid rgba(36, 107, 254, 0.08);
+            border-radius: 12px;
+            background: #fff;
+        }
+        .candidate-word { font-weight: 800; word-break: break-word; }
+        .candidate-metrics {
+            color: var(--muted);
+            font-size: 0.78rem;
+            line-height: 1.5;
+        }
+        .candidate-added { color: #027a48; font-weight: 800; }
+        .candidate-empty {
+            padding: 16px;
+            color: var(--muted);
+            text-align: center;
+        }
+        .candidate-footer {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+        .columns-wrapper {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+        }
+        .column {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 22px;
+            min-width: 250px;
+            flex: 1;
+            box-shadow: var(--soft-shadow);
+            backdrop-filter: blur(16px);
+        }
+        .column-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .column-title {
+            font-weight: 800;
+            color: var(--text);
+            font-size: 1.05rem;
+            letter-spacing: -0.02em;
+        }
+        .column-remove {
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.82;
+            transition: opacity 0.2s, transform 0.2s;
+        }
+        .column-remove:hover { opacity: 1; transform: translateY(-1px); }
+        .noun-list {
+            min-height: 100px;
+            margin-bottom: 16px;
+            padding: 12px;
+            border: 1px dashed rgba(36, 107, 254, 0.28);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.58);
+            transition: border-color 0.2s, background-color 0.2s;
+        }
+        .noun-list:hover {
+            border-color: rgba(36, 107, 254, 0.48);
+            background: rgba(255, 255, 255, 0.78);
+        }
+        .noun-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            background: #fff;
+            border: 1px solid rgba(36, 107, 254, 0.08);
+            border-radius: 12px;
+            margin-bottom: 8px;
+            box-shadow: 0 6px 16px rgba(21, 54, 120, 0.06);
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        .noun-item:hover {
+            transform: translateY(-1px);
+            border-color: rgba(36, 107, 254, 0.18);
+        }
+        .noun-text { flex: 1; font-size: 0.92rem; color: var(--text); }
+        .noun-remove {
+            background: none;
+            border: none;
+            color: #98a2b3;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px;
+            transition: color 0.2s;
+        }
+        .noun-remove:hover { color: #ff6b6b; }
+        .add-noun-input { display: flex; gap: 8px; }
+        .noun-input {
+            flex: 1;
+            padding: 11px 13px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 14px;
+            font-size: 0.9rem;
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.82);
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+        }
+        .noun-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(36, 107, 254, 0.1);
+        }
+        .add-noun-btn, .add-column-btn {
+            min-height: 42px;
+            padding: 0 18px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 14px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 800;
+            transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+        }
+        .add-noun-btn {
+            background: var(--primary);
+            color: white;
+            white-space: nowrap;
+        }
+        .add-noun-btn:hover,
+        .add-column-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(36, 107, 254, 0.14);
+        }
+        .add-column-btn {
+            background: #fff;
+            color: var(--primary-dark);
+            margin-bottom: 0;
+        }
+        .add-column-btn:disabled {
+            background: #eef2f7;
+            color: #98a2b3;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .feishu-sheet-btn {
+            background: #12a150;
+            border-color: #12a150;
+            color: white;
+        }
+        .imc-rescan-btn {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+        .imc-rescan-btn:disabled {
+            background: #d0d5dd;
+            border-color: #d0d5dd;
+            color: #fff;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .top-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .top-actions-right {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .top-actions .add-column-btn,
+        .top-actions .imc-rescan-btn,
+        .top-actions .feishu-sheet-btn { margin-bottom: 0; }
+        .manual-wrapper { margin-top: 20px; }
+        .output-section {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 24px;
+            margin-top: 24px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(16px);
+        }
+        .output-label {
+            font-weight: 800;
+            font-size: 1.1rem;
+            color: var(--text);
+            margin-bottom: 15px;
+            display: block;
+            letter-spacing: -0.02em;
+        }
+        .output-textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 15px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 16px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            resize: vertical;
+            outline: none;
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.72);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .output-textarea:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(36, 107, 254, 0.1);
+        }
+        .output-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .copy-btn {
+            background: var(--primary);
+            color: #ffffff;
+            border: 1px solid var(--primary);
+            padding: 0 18px;
+            min-height: 42px;
+            border-radius: 14px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 800;
+            transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+        }
+        .copy-btn, .export-excel-btn, .danger-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            line-height: 1;
+        }
+        .copy-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(36, 107, 254, 0.14);
+        }
+        .copy-btn.copied { background: var(--primary-dark); color: white; }
+        .generate-btn { background: var(--primary); color: white; }
+        .generate-hover { display: flex; align-items: center; gap: 10px; }
+        .generate-hint {
+            display: none;
+            color: var(--muted);
+            font-size: 0.85rem;
+            line-height: 1;
+        }
+        .generate-hover:hover .generate-hint { display: inline-block; }
+        .export-excel-btn {
+            background: #fff;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            color: var(--primary-dark);
+            padding: 0 18px;
+            min-height: 42px;
+            border-radius: 14px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 800;
+            transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+        }
+        .export-excel-btn:hover {
+            background: #fff;
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(36, 107, 254, 0.14);
+        }
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(22, 32, 51, 0.42);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;   
+            transition: opacity 180ms ease, visibility 180ms ease;
+            backdrop-filter: blur(10px);
+        }
+        .modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+        .modal {
+            width: min(900px, 100%);
+            background: rgba(255, 255, 255, 0.96);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            max-height: 85vh;
+            transform: translateY(10px) scale(0.98);
+            opacity: 0;
+            transition: transform 180ms ease, opacity 180ms ease;
+        }
+        .modal-overlay.show .modal { transform: translateY(0) scale(1); opacity: 1; }
+        .modal-header {
+            padding: 18px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(102, 112, 133, 0.14);
+        }
+        .modal-title { font-weight: 800; color: var(--text); }
+        .modal-close {
+            background: rgba(36, 107, 254, 0.08);
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: var(--primary-dark);
+            padding: 6px 10px;
+            border-radius: 10px;
+        }
+        .modal-close:hover { background: rgba(36, 107, 254, 0.14); }
+        .modal-body {
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            flex: 1;
+            overflow: hidden;
+        }
+        .result-list {
+            border: 1px dashed rgba(36, 107, 254, 0.28);
+            border-radius: 16px;
+            padding: 12px;
+            min-height: 180px;
+            flex: 1;
+            overflow: auto;
+            background: rgba(255, 255, 255, 0.58);
+        }
+        .result-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            border-radius: 12px;
+            background: #fff;
+            border: 1px solid rgba(36, 107, 254, 0.08);
+            margin-bottom: 8px;
+            box-shadow: 0 6px 16px rgba(21, 54, 120, 0.06);
+        }
+        .result-row:last-child { margin-bottom: 0; }
+        .result-checkbox { width: 16px; height: 16px; accent-color: var(--primary); }
+        .result-text {
+            flex: 1;
+            font-size: 0.92rem;
+            color: var(--text);
+            cursor: pointer;
+            word-break: break-word;
+        }
+        .result-input {
+            flex: 1;
+            padding: 9px 11px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 12px;
+            font-size: 0.92rem;
+            color: var(--text);
+            outline: none;
+        }
+        .result-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(36, 107, 254, 0.1);
+        }
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .modal-actions .output-buttons { margin-top: 0; }
+        .danger-btn {
+            background: #ff6b6b;
+            color: white;
+            border: 1px solid #ff6b6b;
+            padding: 0 18px;
+            min-height: 42px;
+            border-radius: 14px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 800;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .danger-btn:hover {
+            background: #ff5252;
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(255, 107, 107, 0.16);
+        }
+        .result-add-btn {
+            width: 100%;
+            border: 1px dashed rgba(36, 107, 254, 0.28);
+            background: rgba(255, 255, 255, 0.82);
+            border-radius: 14px;
+            padding: 11px 12px;
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 1;
+            color: var(--primary);
+            transition: border-color 0.2s, background-color 0.2s;
+        }
+        .result-add-btn:hover { border-color: var(--primary); background: #fff; }
+        @media (max-width: 768px) {
+            body { padding: 24px 0 36px; }
+            .container { width: min(100% - 24px, 1180px); }
+            .tool-header,
+            .ai-generator,
+            .output-section,
+            .column { border-radius: 20px; padding: 22px; }
+            .top-actions { flex-direction: column; align-items: stretch; }
+            .top-actions-right { justify-content: stretch; }
+            .top-actions-right .add-column-btn,
+            .top-actions > .add-column-btn { width: 100%; }
+            .columns-wrapper { flex-direction: column; }
+            .column { min-width: 100%; }
+            .add-noun-input,
+            .generate-hover { flex-direction: column; align-items: stretch; }
+            .api-key-row { grid-template-columns: 1fr; }
+            .candidate-row { grid-template-columns: auto 1fr; }
+            .candidate-metrics { grid-column: 2; }
+            .generate-hint { line-height: 1.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="tool-header">
+            <a class="home-link" href="home.html">← 返回带班首页</a>
+            <h1>拆词加词助手</h1>
+            <p class="tool-subtitle">用于快速组合拆词、单独补充词组，并在导出前集中确认和调整结果。</p>
+        </div>
+        <section class="ai-generator" aria-labelledby="aiGeneratorTitle">
+            <div class="ai-generator-header">
+                <div>
+                    <h2 class="ai-generator-title" id="aiGeneratorTitle">AI 生成管控词组</h2>
+                    <p class="ai-generator-desc">DeepSeek 负责事件分析与候选生成，豆包搜索负责联网取样，本地脚本计算召回与误伤。候选需手动选择后才会进入导出结果。</p>
+                </div>
+            </div>
+            <div class="ai-generator-grid">
+                <textarea class="news-source-input" id="newsSourceInput" placeholder="请粘贴完整新闻原文，包括标题、正文、时间、地点、人物或机构等信息"></textarea>
+                <div class="api-key-group">
+                    <label class="api-key-label" for="deepseekApiKeyInput">DeepSeek API Key</label>
+                    <div class="api-key-row">
+                        <input class="api-key-input" id="deepseekApiKeyInput" type="password" autocomplete="off" placeholder="首次使用请输入 DeepSeek API Key">
+                        <button class="export-excel-btn" id="clearDeepSeekApiKeyBtn" type="button">清除 DeepSeek Key</button>
+                    </div>
+                </div>
+                <div class="api-key-group">
+                    <label class="api-key-label" for="doubaoApiKeyInput">火山引擎访问控制 API Key（需联网问答权限）</label>
+                    <div class="api-key-row">
+                        <input class="api-key-input" id="doubaoApiKeyInput" type="password" autocomplete="off" placeholder="请输入 IAM API访问密钥页面创建的 API Key">
+                        <button class="export-excel-btn" id="clearDoubaoApiKeyBtn" type="button">清除豆包搜索 Key</button>
+                    </div>
+                </div>
+                <div class="ai-generator-actions">
+                    <button class="copy-btn ai-generate-btn" id="aiGenerateBtn" type="button">生成管控词组</button>
+                    <span class="ai-generator-status" id="aiGeneratorStatus" aria-live="polite"></span>
+                </div>
+            </div>
+        </section>
+        <section class="ai-candidates" id="aiCandidates" aria-labelledby="aiCandidatesTitle">
+            <div class="ai-generator-header">
+                <div>
+                    <h2 class="ai-generator-title" id="aiCandidatesTitle">AI 候选词组</h2>
+                    <p class="ai-generator-desc" id="candidateSummary">候选经过联网样本的本地 AND 测试，并由 DeepSeek 复核临界项。</p>
+                </div>
+            </div>
+            <div id="candidateTiers"></div>
+            <div class="candidate-footer">
+                <button class="copy-btn" id="addSelectedCandidatesBtn" type="button">加入导出结果</button>
+                <span class="ai-generator-status" id="candidateActionStatus" aria-live="polite"></span>
+            </div>
+        </section>
+        <div class="top-actions">
+            <button class="add-column-btn" id="addColumnBtn">点击新增一列</button>
+
+
+            <div class="top-actions-right">
+                <button class="add-column-btn feishu-sheet-btn" id="feishuSheetBtn">飞书表格落表</button>
+                <button class="add-column-btn imc-rescan-btn" id="imcRescanBtn">IMC-GID回扫</button>
+                <button class="add-column-btn imc-rescan-btn" id="imcSRescanBtn">IMC-素材回扫</button>
+            </div>
+        </div>
+        <div class="columns-wrapper" id="columnsWrapper">
+            <div class="column" data-column-index="0">
+                <div class="column-header">
+                    <span class="column-title">第 1 列</span>
+                </div>
+                <div class="noun-list" id="nounList0"></div>
+                <div class="add-noun-input">
+                    <input type="text" class="noun-input" id="nounInput0" placeholder="输入需要排列组合的单个词语或词组后，回车或点击添加按钮">
+                    <button class="add-noun-btn" data-column="0">添加</button>
+                </div>
+            </div>
+            <div class="column" data-column-index="1">
+                <div class="column-header">
+                    <span class="column-title">第 2 列</span>
+                    <button class="column-remove" onclick="removeColumn(this)">×</button>
+                </div>
+                <div class="noun-list" id="nounList1"></div>
+                <div class="add-noun-input">
+                    <input type="text" class="noun-input" id="nounInput1" placeholder="输入需要排列组合的单个词语或词组后，回车或点击添加按钮">
+                    <button class="add-noun-btn" data-column="1">添加</button>
+                </div>
+            </div>
+        </div>
+        <div class="manual-wrapper">
+            <div class="column" id="manualColumn">
+                <div class="column-header">
+                    <span class="column-title">单独添加</span>
+                </div>
+                <div class="noun-list" id="manualList"></div>
+                <div class="add-noun-input">
+                    <input type="text" class="noun-input" id="manualKeywordInput" placeholder="输入需要单独添加的词语或词组">
+                    <button class="add-noun-btn" id="manualAddBtn">添加</button>
+                </div>
+            </div>
+        </div>
+        <div class="output-section">
+            <span class="output-label">词组预览</span>
+            <textarea class="output-textarea" id="outputTextarea" readonly></textarea>
+            <div class="output-buttons">
+                
+                <div class="generate-hover">
+                    <button class="copy-btn generate-btn" id="generateBtn">编辑并导出结果</button>
+                    <span class="generate-hint">（进入确认页面，导出前可对以上结果进行调整删改）</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="resultModal">
+        <div class="modal" role="dialog" aria-modal="true">
+            <div class="modal-header">
+                <div class="modal-title">生成结果</div>
+                <button class="modal-close" id="resultModalCloseBtn">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="result-list" id="resultList"></div>
+                <div class="modal-actions">
+                    <button class="danger-btn" id="deleteSelectedBtn">删除选中</button>
+                    <div class="output-buttons">
+                        <button class="copy-btn" id="copyBtn">复制结果并跳转至业务安全平台</button>
+                        <button class="export-excel-btn" id="exportExcelBtn">导出文件并跳转至IMC加词</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="app-config.js"></script>
+    <script>
+        const MAX_COLUMNS = 5;
+        const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
+        const DEEPSEEK_API_KEY_STORAGE = 'split-word-deepseek-api-key';
+        const DEPLOYMENT_CONFIG = window.DAIBAN_HOME_CONFIG || {};
+        const DOUBAO_SEARCH_API_URL = String(DEPLOYMENT_CONFIG.DOUBAO_SEARCH_API_URL || '').trim();
+        const DOUBAO_SEARCH_API_KEY_STORAGE = 'split-word-doubao-search-api-key';
+        let columnCount = 2;
+        let manualKeywords = [];
+        let modalLines = [];
+        let acceptedAiKeywords = [];
+        const aiPipelineState = {
+            phase: 'idle',
+            source: '',
+            eventProfile: null,
+            searchPlan: null,
+            rawSearchResults: [],
+            samples: { groupA: [], groupB: [], groupC: [] },
+            candidates: [],
+            tiers: { high: [], medium: [], low: [] },
+            selectedIds: new Set(),
+            warnings: [],
+        };
+
+        function addManualKeyword() {
+            const input = document.getElementById('manualKeywordInput');
+            const keyword = sanitizeText(input.value).trim();
+            if (!keyword) return;
+            manualKeywords.push(keyword);
+            const list = document.getElementById('manualList');
+            const item = document.createElement('div');
+            item.className = 'noun-item';
+            item.innerHTML = `<span class="noun-text">${keyword}</span><button class="noun-remove" onclick="removeManualKeyword(this, '${keyword}')">×</button>`;
+            list.appendChild(item);
+            input.value = '';
+            input.focus();
+            updateOutput();
+        }
+
+        function removeManualKeyword(btn, keyword) {
+            btn.parentElement.remove();
+            manualKeywords = manualKeywords.filter(k => k !== keyword);
+            updateOutput();
+        }
+
+        function updateOutput() {
+            const columns = document.querySelectorAll('.column:not(#manualColumn)');
+            const nounLists = [];
+            columns.forEach(col => {
+                const items = col.querySelectorAll('.noun-item');
+                const nouns = Array.from(items).map(item => sanitizeText(item.querySelector('.noun-text').textContent).trim()).filter(Boolean);
+                if (nouns.length > 0) nounLists.push(nouns);
+            });
+            let result = [...acceptedAiKeywords, ...manualKeywords];
+            if (nounLists.length > 0) {
+                const combinations = cartesianProduct(nounLists);
+                const combinationStrings = combinations.map(row => row.join(','));
+                result = [...result, ...combinationStrings];
+            }
+            document.getElementById('outputTextarea').value = [...new Set(result)].join('\n');
+        }
+
+        function addNoun(columnIndex) {
+            const input = document.getElementById(`nounInput${columnIndex}`);
+            const noun = sanitizeText(input.value).trim();
+            if (!noun) return;
+            const list = document.getElementById(`nounList${columnIndex}`);
+            const item = document.createElement('div');
+            item.className = 'noun-item';
+            item.innerHTML = `<span class="noun-text">${noun}</span><button class="noun-remove" onclick="removeNoun(this)">×</button>`;
+            list.appendChild(item);
+            input.value = '';
+            input.focus();
+            updateOutput();
+        }
+
+        function removeNoun(btn) {
+            btn.parentElement.remove();
+            updateOutput();
+        }
+
+        function addColumn() {
+            if (columnCount >= MAX_COLUMNS) return;
+            columnCount++;
+            const wrapper = document.getElementById('columnsWrapper');
+            const column = document.createElement('div');
+            column.className = 'column';
+            column.dataset.columnIndex = columnCount - 1;
+            column.innerHTML = `<div class="column-header"><span class="column-title">第 ${columnCount} 列</span><button class="column-remove" onclick="removeColumn(this)">×</button></div><div class="noun-list" id="nounList${columnCount - 1}"></div><div class="add-noun-input"><input type="text" class="noun-input" id="nounInput${columnCount - 1}" placeholder="输入名词"><button class="add-noun-btn" data-column="${columnCount - 1}">添加</button></div>`;
+            wrapper.appendChild(column);
+            if (columnCount >= MAX_COLUMNS) document.getElementById('addColumnBtn').disabled = true;
+        }
+
+        function removeColumn(btn) {
+            btn.parentElement.parentElement.remove();
+            columnCount--;
+            document.getElementById('addColumnBtn').disabled = false;
+            const columns = document.querySelectorAll('.column:not(#manualColumn)');
+            columns.forEach((col, index) => {
+                col.dataset.columnIndex = index;
+                col.querySelector('.column-title').textContent = `第 ${index + 1} 列`;
+            });
+            updateOutput();
+        }
+
+        function cartesianProduct(arrays) {
+            return arrays.reduce((acc, arr) => acc.flatMap(a => arr.map(b => [...a, b])), [[]]);
+        }
+
+        function sanitizeText(value) {
+            return String(value ?? '').replace(/[\u200B\u200C\u200D\uFEFF\u2060\u180E]/g, '');
+        }
+
+        function normalizeApiKey(value) {
+            return sanitizeText(value).trim().replace(/^Bearer\s+/i, '');
+        }
+
+        function getStoredKey(storageKey) {
+            try { return localStorage.getItem(storageKey) || ''; } catch { return ''; }
+        }
+
+        function saveStoredKey(storageKey, value) {
+            localStorage.setItem(storageKey, value);
+        }
+
+        function clearStoredKey(storageKey, inputId, label) {
+            try { localStorage.removeItem(storageKey); } catch {}
+            document.getElementById(inputId).value = '';
+            updateApiKeyStatus(`已清除${label}。`);
+        }
+
+        function updateApiKeyStatus(message = '', isError = false) {
+            const status = document.getElementById('aiGeneratorStatus');
+            const deepSeekSaved = Boolean(getStoredKey(DEEPSEEK_API_KEY_STORAGE));
+            const doubaoSaved = Boolean(getStoredKey(DOUBAO_SEARCH_API_KEY_STORAGE));
+            status.textContent = message || `DeepSeek Key：${deepSeekSaved ? '已保存' : '未配置'}；豆包搜索 Key：${doubaoSaved ? '已保存' : '未配置'}。Key 仅存储在当前浏览器。`;
+            status.classList.toggle('error', isError);
+            status.classList.toggle('api-key-saved', !isError && deepSeekSaved && doubaoSaved);
+            document.getElementById('deepseekApiKeyInput').placeholder = deepSeekSaved ? '已保存；留空继续使用' : '首次使用请输入 DeepSeek API Key';
+            document.getElementById('doubaoApiKeyInput').placeholder = doubaoSaved ? '已保存；留空继续使用' : '请输入 IAM API访问密钥页面创建的 API Key';
+        }
+
+        function extractJson(content) {
+            const cleaned = sanitizeText(content).replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+            const start = cleaned.indexOf('{');
+            const end = cleaned.lastIndexOf('}');
+            if (start < 0 || end <= start) throw new Error('DeepSeek 未返回有效 JSON');
+            return JSON.parse(cleaned.slice(start, end + 1));
+        }
+
+        async function callDeepSeek(apiKey, systemPrompt, input) {
+            const response = await fetch(DEEPSEEK_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+                body: JSON.stringify({
+                    model: 'deepseek-chat',
+                    temperature: 0.15,
+                    response_format: { type: 'json_object' },
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: input },
+                    ],
+                }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(`DeepSeek：${payload.error?.message || `HTTP ${response.status}`}`);
+            return extractJson(payload.choices?.[0]?.message?.content || '');
+        }
+
+        function normalizeCandidate(candidate) {
+            const words = (Array.isArray(candidate) ? candidate : String(candidate).split(/[，,、]/))
+                .map(word => sanitizeText(word).trim())
+                .filter(Boolean);
+            if (words.length < 2 || words.length > 3 || new Set(words).size !== words.length) return null;
+            return { words, text: words.join(',') };
+        }
+
+        function normalizeQuery(query) {
+            return sanitizeText(query).replace(/\s+/g, ' ').trim().slice(0, 100);
+        }
+
+        function prepareSearchPlan(data) {
+            const limits = { groupA: 6, groupB: 4, groupC: 2 };
+            const queries = {};
+            Object.entries(limits).forEach(([group, limit]) => {
+                queries[group] = [...new Set((data.queries?.[group] || []).map(normalizeQuery).filter(Boolean))].slice(0, limit);
+                if (queries[group].length !== limit) {
+                    throw new Error(`DeepSeek 生成的 ${group} 搜索 Query 应为 ${limit} 条，实际为 ${queries[group].length} 条`);
+                }
+            });
+            return {
+                eventSummary: sanitizeText(data.eventSummary || '').trim(),
+                coreEntities: (data.coreEntities || []).map(sanitizeText).filter(Boolean),
+                ambiguousEntities: (data.ambiguousEntities || []).map(sanitizeText).filter(Boolean),
+                queries,
+                seedCandidates: (data.seedCandidates || []).map(normalizeCandidate).filter(Boolean),
+            };
+        }
+
+        async function searchWithDoubao(apiKey, query, category) {
+            const response = await fetch(DOUBAO_SEARCH_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+                body: JSON.stringify({
+                    Query: query,
+                    Count: 10,
+                }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.ResponseMetadata?.Error) {
+                throw new Error(payload.ResponseMetadata?.Error?.Message || payload.error || `HTTP ${response.status}`);
+            }
+            return (payload.Result?.WebResults || []).map((item, index) => ({
+                id: '',
+                expectedGroup: category,
+                query,
+                title: sanitizeText(item.Title || ''),
+                site: sanitizeText(item.SiteName || ''),
+                url: sanitizeText(item.Url || ''),
+                publishTime: sanitizeText(item.PublishTime || ''),
+                auth: sanitizeText(item.AuthInfoDes || ''),
+                content: sanitizeText(item.Content || item.Summary || item.Snippet || ''),
+                sortId: item.SortId ?? index,
+            }));
+        }
+
+        async function runSearchPlan(apiKey, searchPlan) {
+            const jobs = Object.entries(searchPlan.queries).flatMap(([category, queries]) =>
+                queries.map(query => ({ category, query }))
+            );
+            const results = [];
+            let successCount = 0;
+            for (let index = 0; index < jobs.length; index += 3) {
+                const batch = jobs.slice(index, index + 3);
+                const settled = await Promise.allSettled(batch.map(job =>
+                    searchWithDoubao(apiKey, job.query, job.category)
+                ));
+                settled.forEach((result, offset) => {
+                    if (result.status === 'fulfilled') {
+                        successCount += 1;
+                        results.push(...result.value);
+                    } else {
+                        aiPipelineState.warnings.push(`${batch[offset].query}：${result.reason?.message || '搜索失败'}`);
+                    }
+                });
+            }
+            if (successCount < 6) throw new Error(`豆包搜索仅成功 ${successCount} 次，样本不足`);
+            const seen = new Set();
+            return results.filter(item => {
+                const key = item.url || `${item.title}|${item.site}|${item.publishTime}`;
+                if (!key || seen.has(key)) return false;
+                seen.add(key);
+                item.id = `sample-${seen.size}`;
+                return true;
+            }).slice(0, 80);
+        }
+
+        function buildSamplePayload(samples) {
+            return samples.map(item => ({
+                id: item.id,
+                expectedGroup: item.expectedGroup,
+                title: item.title,
+                site: item.site,
+                publishTime: item.publishTime,
+                content: item.content.slice(0, 1200),
+            }));
+        }
+
+        function createGroups(source, samples, classification) {
+            const byId = new Map(samples.map(item => [item.id, item]));
+            const assigned = new Set();
+            const groups = {
+                groupA: [{ id: 'source', title: '原始新闻', content: source }],
+                groupB: [],
+                groupC: [],
+            };
+            ['groupA', 'groupB', 'groupC'].forEach(group => {
+                (classification?.[group] || []).forEach(id => {
+                    if (byId.has(id) && !assigned.has(id)) {
+                        assigned.add(id);
+                        groups[group].push(byId.get(id));
+                    }
+                });
+            });
+            return groups;
+        }
+
+        function normalizeMatchText(value) {
+            return sanitizeText(value).normalize('NFKC').toLowerCase().replace(/\s+/g, '');
+        }
+
+        function scoreCandidates(candidateInputs, groups) {
+            const unique = new Map();
+            candidateInputs.map(normalizeCandidate).filter(Boolean).forEach(candidate => unique.set(candidate.text, candidate));
+            const texts = {};
+            Object.entries(groups).forEach(([group, items]) => {
+                texts[group] = items.map(item => ({
+                    ...item,
+                    matchText: normalizeMatchText(`${item.title || ''}\n${item.content || ''}`),
+                }));
+            });
+            const negativeTotal = texts.groupB.length + texts.groupC.length;
+            return [...unique.values()].map((candidate, index) => {
+                const normalizedWords = candidate.words.map(normalizeMatchText);
+                const hitItems = group => texts[group].filter(item =>
+                    normalizedWords.every(word => item.matchText.includes(word))
+                );
+                const aHits = hitItems('groupA');
+                const bHits = hitItems('groupB');
+                const cHits = hitItems('groupC');
+                const falseHits = bHits.length + cHits.length;
+                const recall = aHits.length / texts.groupA.length;
+                const falsePositiveRate = negativeTotal ? falseHits / negativeTotal : null;
+                const precision = (aHits.length + falseHits) ? aHits.length / (aHits.length + falseHits) : 0;
+                const score = Math.max(0, Math.round((
+                    recall * 65
+                    + precision * 25
+                    + (falsePositiveRate === null ? 0 : (1 - falsePositiveRate) * 10)
+                    - (candidate.words.length === 3 ? 3 : 0)
+                ) * 10) / 10);
+                let tier = 'low';
+                if (negativeTotal && score >= 85 && recall >= 0.75 && falsePositiveRate <= 0.05) tier = 'high';
+                else if (score >= 65 && recall >= 0.5 && (falsePositiveRate === null || falsePositiveRate <= 0.15)) tier = 'medium';
+                return {
+                    id: `candidate-${index + 1}`,
+                    ...candidate,
+                    score, recall, precision, falsePositiveRate, tier, initialTier: tier,
+                    hits: { groupA: aHits, groupB: bHits, groupC: cHits },
+                    review: null,
+                };
+            }).sort((a, b) => b.score - a.score);
+        }
+
+        function applyReview(candidates, reviews) {
+            const order = ['low', 'medium', 'high'];
+            const byText = new Map((reviews || []).map(item => [item.text, item]));
+            candidates.forEach(candidate => {
+                const review = byText.get(candidate.text);
+                if (!review) return;
+                const current = order.indexOf(candidate.tier);
+                if (review.action === 'upgrade') candidate.tier = order[Math.min(2, current + 1)];
+                if (review.action === 'downgrade') candidate.tier = order[Math.max(0, current - 1)];
+                if (review.action === 'reject') candidate.tier = 'low';
+                candidate.review = { action: review.action || 'keep', reason: sanitizeText(review.reason || '').slice(0, 120) };
+            });
+        }
+
+        function renderCandidateTiers() {
+            const labels = { high: '高可用', medium: '中可用', low: '低可用' };
+            const container = document.getElementById('candidateTiers');
+            container.innerHTML = '';
+            Object.entries(labels).forEach(([tier, label]) => {
+                const items = aiPipelineState.candidates.filter(item => item.tier === tier);
+                const section = document.createElement('section');
+                section.className = `candidate-tier ${tier}`;
+                section.innerHTML = `
+                    <div class="candidate-tier-header">
+                        <span class="candidate-tier-title">${label}（${items.length}）</span>
+                        <span class="candidate-tier-actions">
+                            <button type="button" data-select-tier="${tier}">全选本档</button>
+                            <button type="button" data-clear-tier="${tier}">取消本档</button>
+                        </span>
+                    </div>
+                    <div class="candidate-list"></div>`;
+                const list = section.querySelector('.candidate-list');
+                if (!items.length) {
+                    list.innerHTML = '<div class="candidate-empty">暂无候选</div>';
+                } else {
+                    items.forEach(item => {
+                        const row = document.createElement('label');
+                        row.className = 'candidate-row';
+                        const falseRate = item.falsePositiveRate === null ? '样本不足' : `${Math.round(item.falsePositiveRate * 100)}%`;
+                        const added = acceptedAiKeywords.includes(item.text);
+                        row.innerHTML = `
+                            <input type="checkbox" class="candidate-checkbox" data-id="${item.id}" ${aiPipelineState.selectedIds.has(item.id) ? 'checked' : ''}>
+                            <span class="candidate-word"></span>
+                            <span class="candidate-metrics"></span>`;
+                        row.querySelector('.candidate-word').textContent = item.text;
+                        const metrics = row.querySelector('.candidate-metrics');
+                        metrics.textContent = `评分 ${item.score}；召回 ${Math.round(item.recall * 100)}%；误伤 ${falseRate}${item.review?.reason ? `；复核：${item.review.reason}` : ''}`;
+                        if (added) {
+                            const addedLabel = document.createElement('span');
+                            addedLabel.className = 'candidate-added';
+                            addedLabel.textContent = '；已加入';
+                            metrics.appendChild(addedLabel);
+                        }
+                        list.appendChild(row);
+                    });
+                }
+                container.appendChild(section);
+            });
+            document.getElementById('aiCandidates').classList.add('show');
+            document.getElementById('candidateSummary').textContent =
+                `Group A ${aiPipelineState.samples.groupA.length} 条，Group B ${aiPipelineState.samples.groupB.length} 条，Group C ${aiPipelineState.samples.groupC.length} 条；${aiPipelineState.warnings.length ? `另有 ${aiPipelineState.warnings.length} 条警告。` : '搜索完整。'}`;
+        }
+
+        function setPipelineStatus(message, isError = false) {
+            aiPipelineState.phase = isError ? 'error' : message;
+            updateApiKeyStatus(message, isError);
+        }
+
+        async function generateWithDeepSeek() {
+            const source = sanitizeText(document.getElementById('newsSourceInput').value).trim();
+            const deepInput = document.getElementById('deepseekApiKeyInput');
+            const doubaoInput = document.getElementById('doubaoApiKeyInput');
+            const deepKey = normalizeApiKey(deepInput.value || getStoredKey(DEEPSEEK_API_KEY_STORAGE));
+            const doubaoKey = normalizeApiKey(doubaoInput.value || getStoredKey(DOUBAO_SEARCH_API_KEY_STORAGE));
+            const button = document.getElementById('aiGenerateBtn');
+            if (!source) return setPipelineStatus('请先输入新闻原文。', true), document.getElementById('newsSourceInput').focus();
+            if (!DOUBAO_SEARCH_API_URL) return setPipelineStatus('请先配置 Cloudflare Worker 搜索代理地址。', true);
+            if (!deepKey) return setPipelineStatus('请输入 DeepSeek API Key。', true), deepInput.focus();
+            if (!doubaoKey) return setPipelineStatus('请输入具有联网问答权限的火山引擎访问控制 API Key。', true), doubaoInput.focus();
+            try {
+                if (deepInput.value.trim()) saveStoredKey(DEEPSEEK_API_KEY_STORAGE, deepKey);
+                if (doubaoInput.value.trim()) saveStoredKey(DOUBAO_SEARCH_API_KEY_STORAGE, doubaoKey);
+                deepInput.value = '';
+                doubaoInput.value = '';
+            } catch {}
+
+            button.disabled = true;
+            button.textContent = '正在生成…';
+            aiPipelineState.source = source;
+            aiPipelineState.warnings = [];
+            aiPipelineState.selectedIds.clear();
+            try {
+                setPipelineStatus('1/9 正在分析新闻原文并生成搜索计划…');
+                const planData = await callDeepSeek(deepKey,
+                    '你是新闻事件检索规划器。只输出JSON。生成6条同事件查询、4条易误伤查询、2条随机新闻查询，以及2至3词的初始候选。字段必须是eventSummary、coreEntities、ambiguousEntities、queries(groupA/groupB/groupC)、seedCandidates。',
+                    `新闻原文：\n${source}`);
+                const plan = prepareSearchPlan(planData);
+                aiPipelineState.eventProfile = plan;
+                aiPipelineState.searchPlan = plan;
+
+                setPipelineStatus('2/9 搜索计划已生成；3-5/9 正在执行豆包联网搜索…');
+                const searchResults = await runSearchPlan(doubaoKey, plan);
+                aiPipelineState.rawSearchResults = searchResults;
+
+                setPipelineStatus('6/9 正在归组搜索样本并扩展候选…');
+                const classifyData = await callDeepSeek(deepKey,
+                    '你是新闻样本分类与管控词候选生成器。只输出JSON。按目标事件将sample ID分入groupA、groupB、groupC、unknown；结合原文和同事件样本生成尽可能少的2至3词候选。返回classification和candidates。',
+                    JSON.stringify({
+                        eventSummary: plan.eventSummary,
+                        coreEntities: plan.coreEntities,
+                        source,
+                        samples: buildSamplePayload(searchResults),
+                        seedCandidates: plan.seedCandidates.map(item => item.words),
+                    }));
+                const groups = createGroups(source, searchResults, classifyData.classification);
+                aiPipelineState.samples = groups;
+
+                setPipelineStatus('7/9 正在本地计算召回、误伤和可用程度…');
+                const candidateInputs = [
+                    ...plan.seedCandidates.map(item => item.words),
+                    ...(classifyData.candidates || []),
+                ];
+                const candidates = scoreCandidates(candidateInputs, groups);
+                if (!candidates.length) throw new Error('未生成合法的2至3词候选');
+
+                const boundary = candidates.filter(item =>
+                    Math.min(Math.abs(item.score - 65), Math.abs(item.score - 85)) <= 8
+                    || (item.recall >= 0.75 && (item.falsePositiveRate || 0) > 0.05)
+                ).slice(0, 20);
+                if (boundary.length) {
+                    setPipelineStatus('8/9 正在让 DeepSeek 复核临界候选…');
+                    try {
+                        const reviewData = await callDeepSeek(deepKey,
+                            '你是候选词组复核器。只输出JSON对象，字段reviews。每项包含text、action(keep/upgrade/downgrade/reject)、reason。最多调整一档，不得修改统计数据。',
+                            JSON.stringify({
+                                eventSummary: plan.eventSummary,
+                                candidates: boundary.map(item => ({
+                                    text: item.text, tier: item.tier, score: item.score,
+                                    recall: item.recall, precision: item.precision,
+                                    falsePositiveRate: item.falsePositiveRate,
+                                    hitTitles: Object.fromEntries(Object.entries(item.hits).map(([key, values]) => [key, values.map(value => value.title).slice(0, 8)])),
+                                })),
+                            }));
+                        applyReview(candidates, reviewData.reviews);
+                    } catch (error) {
+                        aiPipelineState.warnings.push(`临界复核失败：${error.message}`);
+                    }
+                }
+                aiPipelineState.candidates = candidates;
+                renderCandidateTiers();
+                setPipelineStatus(`9/9 完成：生成 ${candidates.length} 个候选，请选择后加入导出结果。`);
+                document.getElementById('aiCandidates').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } catch (error) {
+                const message = error instanceof TypeError
+                    ? '网络或跨域请求失败。若豆包接口不允许浏览器直连，需要启用同源代理。'
+                    : `生成失败：${error.message}`;
+                setPipelineStatus(message, true);
+            } finally {
+                button.disabled = false;
+                button.textContent = '生成管控词组';
+            }
+        }
+
+        function selectCandidateTier(tier, selected) {
+            aiPipelineState.candidates
+                .filter(item => item.tier === tier)
+                .forEach(item => {
+                    if (selected) aiPipelineState.selectedIds.add(item.id);
+                    else aiPipelineState.selectedIds.delete(item.id);
+                });
+            renderCandidateTiers();
+        }
+
+        function addSelectedCandidates() {
+            const selected = aiPipelineState.candidates
+                .filter(item => aiPipelineState.selectedIds.has(item.id))
+                .map(item => item.text);
+            if (!selected.length) {
+                document.getElementById('candidateActionStatus').textContent = '请先选择至少一个候选词组。';
+                return;
+            }
+            const previousSize = acceptedAiKeywords.length;
+            acceptedAiKeywords = [...new Set([...acceptedAiKeywords, ...selected])];
+            updateOutput();
+            renderCandidateTiers();
+            document.getElementById('candidateActionStatus').textContent =
+                `已加入 ${acceptedAiKeywords.length - previousSize} 个新词组，重复项已自动忽略。`;
+        }
+
+        function getOutputLines() {
+            const textarea = document.getElementById('outputTextarea');
+            return textarea.value
+                .split('\n')
+                .map(s => sanitizeText(s).trim())
+                .filter(Boolean);
+        }
+
+        function setOutputLines(lines) {
+            document.getElementById('outputTextarea').value = lines.map(s => sanitizeText(s).trim()).filter(Boolean).join('\n');
+        }
+
+        function renderModalList() {
+            const container = document.getElementById('resultList');
+            container.innerHTML = '';
+            modalLines.forEach((line, index) => {
+                const row = document.createElement('div');
+                row.className = 'result-row';
+                row.innerHTML = `
+                    <input class="result-checkbox" type="checkbox" data-index="${index}">
+                    <span class="result-text" data-index="${index}"></span>
+                `;
+                row.querySelector('.result-text').textContent = line;
+                container.appendChild(row);
+            });
+
+            const addBtn = document.createElement('button');
+            addBtn.type = 'button';
+            addBtn.className = 'result-add-btn';
+            addBtn.id = 'resultAddBtn';
+            addBtn.textContent = '+';
+            container.appendChild(addBtn);
+        }
+
+        function openResultModal() {
+            modalLines = getOutputLines();
+            renderModalList();
+            document.getElementById('resultModal').classList.add('show');
+        }
+
+        function closeResultModal() {
+            document.getElementById('resultModal').classList.remove('show');
+        }
+
+        function deleteSelectedLines() {
+            const checks = Array.from(document.querySelectorAll('#resultList .result-checkbox:checked'));
+            if (checks.length === 0) return;
+            const indices = new Set(checks.map(c => Number(c.dataset.index)));
+            modalLines = modalLines.filter((_, i) => !indices.has(i));
+            setOutputLines(modalLines);
+            renderModalList();
+        }
+
+        function startEditLine(index) {
+            const rows = document.querySelectorAll('#resultList .result-row');
+            const row = rows[index];
+            if (!row) return;
+            const textEl = row.querySelector('.result-text');
+            if (!textEl) return;
+            const current = modalLines[index] ?? '';
+            const input = document.createElement('input');
+            input.className = 'result-input';
+            input.value = current;
+            textEl.replaceWith(input);
+            input.focus();
+            input.setSelectionRange(input.value.length, input.value.length);
+
+            const commit = () => {
+                const value = sanitizeText(input.value).trim();
+                if (!value) {
+                    modalLines.splice(index, 1);
+                } else {
+                    modalLines[index] = value;
+                }
+                setOutputLines(modalLines);
+                renderModalList();
+            };
+
+            input.addEventListener('blur', commit, { once: true });
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') commit();
+                if (e.key === 'Escape') renderModalList();
+            });
+        }
+
+        function addTempLine() {
+            modalLines.push('');
+            renderModalList();
+            startEditLine(modalLines.length - 1);
+        }
+
+        function copyResult() {
+            const textarea = document.getElementById('outputTextarea');
+            if (!textarea.value) return;
+            navigator.clipboard.writeText(textarea.value).then(() => {
+                const btn = document.getElementById('copyBtn');
+                btn.textContent = '已复制';
+                btn.classList.add('copied');
+                setTimeout(() => { btn.textContent = '复制结果并跳转至业务安全平台'; btn.classList.remove('copied'); }, 2000);
+                window.open('https://safe.bytedance.net/strategy/antidirt2/tag_list/detail/6180', '_blank');
+            });
+        }
+
+        function exportToExcel() {
+            if (!window.XLSX || !XLSX.utils) {
+                alert('导出失败：未能加载 XLSX 依赖，请检查网络或稍后重试');
+                return;
+            }
+
+            const lines = getOutputLines();
+            if (lines.length === 0) {
+                alert('导出结果为空');
+                return;
+            }
+
+            window.open('https://bee.bytedance.net/1533/combine-imc/16410/data', '_blank');
+
+            const now = new Date();
+            const fileYear = now.getFullYear();
+            const fileMonth = String(now.getMonth() + 1).padStart(2, '0');
+            const fileDay = String(now.getDate()).padStart(2, '0');
+            const fileHours = String(now.getHours()).padStart(2, '0');
+            const fileMinutes = String(now.getMinutes()).padStart(2, '0');
+            const fileSeconds = String(now.getSeconds()).padStart(2, '0');
+            const fileTimestamp = `${fileYear}${fileMonth}${fileDay}_${fileHours}${fileMinutes}${fileSeconds}`;
+
+            const expireDate = new Date();
+            expireDate.setMonth(expireDate.getMonth() + 1);
+            const year = expireDate.getFullYear();
+            const month = String(expireDate.getMonth() + 1).padStart(2, '0');
+            const day = String(expireDate.getDate()).padStart(2, '0');
+            const hours = String(expireDate.getHours()).padStart(2, '0');
+            const minutes = String(expireDate.getMinutes()).padStart(2, '0');
+            const seconds = String(expireDate.getSeconds()).padStart(2, '0');
+            const expireTime = `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
+
+            const worksheetData = [];
+            worksheetData.push(['stop_keyword', 'expire_time']);
+            lines.forEach(keyword => {
+                worksheetData.push([keyword, expireTime]);
+            });
+
+            const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, '拆词表');
+
+            const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([wbout], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            });
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = `拆词表_${fileTimestamp}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(blobUrl);
+        }
+
+        function openFeishuSheet() {
+            window.open('https://bytedance.larkoffice.com/sheets/X3lzs3LKOhsJ1Bth11Cc7wXvndf', '_blank');
+        }
+
+        function openImcRescan() {
+            const now = new Date();
+            const startMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0).getTime();
+            const endMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0).getTime() - 1;
+            const url = new URL('https://imc.bytedance.net/tools/push-intercept/material-group');
+            url.searchParams.set('curAppId', '1128');
+            url.searchParams.set('isNewTask', '0');
+            url.searchParams.set('startCreateTime', String(startMs));
+            url.searchParams.set('endCreateTime', String(endMs));
+            url.searchParams.set('pageNum', '1');
+            window.open(url.toString(), '_blank');
+        }
+        function openImcSRescan() {
+            const now = new Date();
+            const startMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0).getTime();
+            const endMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0).getTime() - 1;
+            const url = new URL('https://imc.bytedance.net/tools/push-intercept/material-intercept');
+            url.searchParams.set('curAppId', '1128');
+            url.searchParams.set('isNewTask', '0');
+            url.searchParams.set('startCreateTime', String(startMs));
+            url.searchParams.set('endCreateTime', String(endMs));
+            url.searchParams.set('pageNum', '1');
+            window.open(url.toString(), '_blank');
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+            updateApiKeyStatus();
+            document.getElementById('aiGenerateBtn').addEventListener('click', generateWithDeepSeek);
+            document.getElementById('clearDeepSeekApiKeyBtn').addEventListener('click', () =>
+                clearStoredKey(DEEPSEEK_API_KEY_STORAGE, 'deepseekApiKeyInput', ' DeepSeek API Key')
+            );
+            document.getElementById('clearDoubaoApiKeyBtn').addEventListener('click', () =>
+                clearStoredKey(DOUBAO_SEARCH_API_KEY_STORAGE, 'doubaoApiKeyInput', '豆包搜索 API Key')
+            );
+            document.getElementById('addSelectedCandidatesBtn').addEventListener('click', addSelectedCandidates);
+            document.getElementById('candidateTiers').addEventListener('change', (e) => {
+                const checkbox = e.target.closest('.candidate-checkbox');
+                if (!checkbox) return;
+                if (checkbox.checked) aiPipelineState.selectedIds.add(checkbox.dataset.id);
+                else aiPipelineState.selectedIds.delete(checkbox.dataset.id);
+            });
+            document.getElementById('candidateTiers').addEventListener('click', (e) => {
+                const selectButton = e.target.closest('[data-select-tier]');
+                const clearButton = e.target.closest('[data-clear-tier]');
+                if (selectButton) selectCandidateTier(selectButton.dataset.selectTier, true);
+                if (clearButton) selectCandidateTier(clearButton.dataset.clearTier, false);
+            });
+            document.getElementById('addColumnBtn').addEventListener('click', addColumn);
+            document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
+            document.getElementById('copyBtn').addEventListener('click', copyResult);
+            document.getElementById('feishuSheetBtn').addEventListener('click', openFeishuSheet);
+            document.getElementById('imcRescanBtn').addEventListener('click', openImcRescan);
+            document.getElementById('imcSRescanBtn').addEventListener('click', openImcSRescan);
+            document.getElementById('manualAddBtn').addEventListener('click', addManualKeyword);
+            document.getElementById('generateBtn').addEventListener('click', openResultModal);
+            document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelectedLines);
+            document.getElementById('resultModalCloseBtn').addEventListener('click', closeResultModal);
+            document.getElementById('resultModal').addEventListener('click', (e) => {
+                if (e.target && e.target.id === 'resultModal') closeResultModal();
+            });
+            document.getElementById('resultList').addEventListener('click', (e) => {
+                const addBtn = e.target.closest('#resultAddBtn');
+                if (addBtn) {
+                    addTempLine();
+                    return;
+                }
+                const el = e.target.closest('.result-text');
+                if (!el) return;
+                startEditLine(Number(el.dataset.index));
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closeResultModal();
+            });
+            document.addEventListener('click', (e) => {
+                const btn = e.target.closest('.add-noun-btn');
+                if (btn && btn.id !== 'manualAddBtn') {
+                    const columnIndex = parseInt(btn.dataset.column);
+                    addNoun(columnIndex);
+                }
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.target.classList.contains('noun-input') && e.key === 'Enter') {
+                    if (e.target.id === 'manualKeywordInput') addManualKeyword();
+                    else {
+                        const columnIndex = parseInt(e.target.id.replace('nounInput', ''));
+                        addNoun(columnIndex);
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

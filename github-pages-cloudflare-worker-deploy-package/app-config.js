@@ -1,0 +1,3 @@
+window.DAIBAN_HOME_CONFIG = {
+    DOUBAO_SEARCH_API_URL: '',
+};
