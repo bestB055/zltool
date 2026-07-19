@@ -86,6 +86,174 @@
             position: relative;
             z-index: 1;
         }
+        .ai-generator {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: var(--soft-shadow);
+            backdrop-filter: blur(16px);
+        }
+        .ai-generator-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .ai-generator-title {
+            font-size: 1.15rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+        .ai-generator-desc,
+        .ai-generator-status {
+            color: var(--muted);
+            font-size: 0.86rem;
+            line-height: 1.6;
+        }
+        .ai-generator-grid {
+            display: grid;
+            gap: 14px;
+        }
+        .news-source-input {
+            width: 100%;
+            min-height: 220px;
+            padding: 15px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.78);
+            color: var(--text);
+            font: inherit;
+            line-height: 1.65;
+            resize: vertical;
+            outline: none;
+        }
+        .news-source-input:focus,
+        .api-key-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(36, 107, 254, 0.1);
+        }
+        .api-key-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+        }
+        .api-key-group {
+            display: grid;
+            gap: 6px;
+        }
+        .api-key-label {
+            color: var(--text);
+            font-size: 0.82rem;
+            font-weight: 800;
+        }
+        .api-key-input {
+            width: 100%;
+            min-height: 42px;
+            padding: 0 13px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.82);
+            color: var(--text);
+            outline: none;
+        }
+        .ai-generator-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .ai-generate-btn:disabled {
+            cursor: wait;
+            opacity: 0.65;
+            transform: none;
+            box-shadow: none;
+        }
+        .api-key-saved {
+            color: #027a48;
+        }
+        .ai-generator-status.error {
+            color: #b42318;
+        }
+        .ai-candidates {
+            display: none;
+            margin-bottom: 24px;
+            padding: 24px;
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            background: var(--card);
+            box-shadow: var(--soft-shadow);
+        }
+        .ai-candidates.show { display: block; }
+        .candidate-tier {
+            margin-top: 16px;
+            overflow: hidden;
+            border: 1px solid rgba(36, 107, 254, 0.12);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.62);
+        }
+        .candidate-tier-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px;
+        }
+        .candidate-tier.high .candidate-tier-header { background: rgba(18, 161, 80, 0.12); }
+        .candidate-tier.medium .candidate-tier-header { background: rgba(247, 144, 9, 0.14); }
+        .candidate-tier.low .candidate-tier-header { background: rgba(217, 45, 32, 0.1); }
+        .candidate-tier-title { font-weight: 900; }
+        .candidate-tier-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .candidate-tier-actions button {
+            padding: 5px 9px;
+            border: 1px solid rgba(36, 107, 254, 0.15);
+            border-radius: 9px;
+            background: #fff;
+            color: var(--primary-dark);
+            cursor: pointer;
+            font-size: 0.76rem;
+            font-weight: 800;
+        }
+        .candidate-list {
+            display: grid;
+            gap: 8px;
+            padding: 12px;
+        }
+        .candidate-row {
+            display: grid;
+            grid-template-columns: auto minmax(130px, 1fr) minmax(220px, 2fr);
+            gap: 10px;
+            align-items: center;
+            padding: 11px 12px;
+            border: 1px solid rgba(36, 107, 254, 0.08);
+            border-radius: 12px;
+            background: #fff;
+        }
+        .candidate-word { font-weight: 800; word-break: break-word; }
+        .candidate-metrics {
+            color: var(--muted);
+            font-size: 0.78rem;
+            line-height: 1.5;
+        }
+        .candidate-added { color: #027a48; font-weight: 800; }
+        .candidate-empty {
+            padding: 16px;
+            color: var(--muted);
+            text-align: center;
+        }
+        .candidate-footer {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
         .columns-wrapper {
             display: flex;
             gap: 16px;
@@ -492,6 +660,7 @@
             body { padding: 24px 0 36px; }
             .container { width: min(100% - 24px, 1180px); }
             .tool-header,
+            .ai-generator,
             .output-section,
             .column { border-radius: 20px; padding: 22px; }
             .top-actions { flex-direction: column; align-items: stretch; }
@@ -502,6 +671,9 @@
             .column { min-width: 100%; }
             .add-noun-input,
             .generate-hover { flex-direction: column; align-items: stretch; }
+            .api-key-row { grid-template-columns: 1fr; }
+            .candidate-row { grid-template-columns: auto 1fr; }
+            .candidate-metrics { grid-column: 2; }
             .generate-hint { line-height: 1.5; }
         }
     </style>
@@ -513,6 +685,48 @@
             <h1>拆词加词助手</h1>
             <p class="tool-subtitle">用于快速组合拆词、单独补充词组，并在导出前集中确认和调整结果。</p>
         </div>
+        <section class="ai-generator" aria-labelledby="aiGeneratorTitle">
+            <div class="ai-generator-header">
+                <div>
+                    <h2 class="ai-generator-title" id="aiGeneratorTitle">AI 生成管控词组</h2>
+                    <p class="ai-generator-desc">DeepSeek 负责事件分析与候选生成，豆包搜索负责联网取样，本地脚本计算召回与误伤。候选需手动选择后才会进入导出结果。</p>
+                </div>
+            </div>
+            <div class="ai-generator-grid">
+                <textarea class="news-source-input" id="newsSourceInput" placeholder="请粘贴完整新闻原文，包括标题、正文、时间、地点、人物或机构等信息"></textarea>
+                <div class="api-key-group">
+                    <label class="api-key-label" for="deepseekApiKeyInput">DeepSeek API Key</label>
+                    <div class="api-key-row">
+                        <input class="api-key-input" id="deepseekApiKeyInput" type="password" autocomplete="off" placeholder="首次使用请输入 DeepSeek API Key">
+                        <button class="export-excel-btn" id="clearDeepSeekApiKeyBtn" type="button">清除 DeepSeek Key</button>
+                    </div>
+                </div>
+                <div class="api-key-group">
+                    <label class="api-key-label" for="doubaoApiKeyInput">火山引擎访问控制 API Key（需联网问答权限）</label>
+                    <div class="api-key-row">
+                        <input class="api-key-input" id="doubaoApiKeyInput" type="password" autocomplete="off" placeholder="请输入 IAM API访问密钥页面创建的 API Key">
+                        <button class="export-excel-btn" id="clearDoubaoApiKeyBtn" type="button">清除豆包搜索 Key</button>
+                    </div>
+                </div>
+                <div class="ai-generator-actions">
+                    <button class="copy-btn ai-generate-btn" id="aiGenerateBtn" type="button">生成管控词组</button>
+                    <span class="ai-generator-status" id="aiGeneratorStatus" aria-live="polite"></span>
+                </div>
+            </div>
+        </section>
+        <section class="ai-candidates" id="aiCandidates" aria-labelledby="aiCandidatesTitle">
+            <div class="ai-generator-header">
+                <div>
+                    <h2 class="ai-generator-title" id="aiCandidatesTitle">AI 候选词组</h2>
+                    <p class="ai-generator-desc" id="candidateSummary">候选经过联网样本的本地 AND 测试，并由 DeepSeek 复核临界项。</p>
+                </div>
+            </div>
+            <div id="candidateTiers"></div>
+            <div class="candidate-footer">
+                <button class="copy-btn" id="addSelectedCandidatesBtn" type="button">加入导出结果</button>
+                <span class="ai-generator-status" id="candidateActionStatus" aria-live="polite"></span>
+            </div>
+        </section>
         <div class="top-actions">
             <button class="add-column-btn" id="addColumnBtn">点击新增一列</button>
 
@@ -593,9 +807,26 @@
 
     <script>
         const MAX_COLUMNS = 5;
+        const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
+        const DEEPSEEK_API_KEY_STORAGE = 'split-word-deepseek-api-key';
+        const DOUBAO_SEARCH_API_URL = '/.netlify/functions/doubao-search';
+        const DOUBAO_SEARCH_API_KEY_STORAGE = 'split-word-doubao-search-api-key';
         let columnCount = 2;
         let manualKeywords = [];
         let modalLines = [];
+        let acceptedAiKeywords = [];
+        const aiPipelineState = {
+            phase: 'idle',
+            source: '',
+            eventProfile: null,
+            searchPlan: null,
+            rawSearchResults: [],
+            samples: { groupA: [], groupB: [], groupC: [] },
+            candidates: [],
+            tiers: { high: [], medium: [], low: [] },
+            selectedIds: new Set(),
+            warnings: [],
+        };
 
         function addManualKeyword() {
             const input = document.getElementById('manualKeywordInput');
@@ -626,14 +857,13 @@
                 const nouns = Array.from(items).map(item => sanitizeText(item.querySelector('.noun-text').textContent).trim()).filter(Boolean);
                 if (nouns.length > 0) nounLists.push(nouns);
             });
-            let result = [];
-            if (manualKeywords.length > 0) result = [...manualKeywords];
+            let result = [...acceptedAiKeywords, ...manualKeywords];
             if (nounLists.length > 0) {
                 const combinations = cartesianProduct(nounLists);
                 const combinationStrings = combinations.map(row => row.join(','));
                 result = [...result, ...combinationStrings];
             }
-            document.getElementById('outputTextarea').value = result.join('\n');
+            document.getElementById('outputTextarea').value = [...new Set(result)].join('\n');
         }
 
         function addNoun(columnIndex) {
@@ -685,6 +915,414 @@
 
         function sanitizeText(value) {
             return String(value ?? '').replace(/[\u200B\u200C\u200D\uFEFF\u2060\u180E]/g, '');
+        }
+
+        function normalizeApiKey(value) {
+            return sanitizeText(value).trim().replace(/^Bearer\s+/i, '');
+        }
+
+        function getStoredKey(storageKey) {
+            try { return localStorage.getItem(storageKey) || ''; } catch { return ''; }
+        }
+
+        function saveStoredKey(storageKey, value) {
+            localStorage.setItem(storageKey, value);
+        }
+
+        function clearStoredKey(storageKey, inputId, label) {
+            try { localStorage.removeItem(storageKey); } catch {}
+            document.getElementById(inputId).value = '';
+            updateApiKeyStatus(`已清除${label}。`);
+        }
+
+        function updateApiKeyStatus(message = '', isError = false) {
+            const status = document.getElementById('aiGeneratorStatus');
+            const deepSeekSaved = Boolean(getStoredKey(DEEPSEEK_API_KEY_STORAGE));
+            const doubaoSaved = Boolean(getStoredKey(DOUBAO_SEARCH_API_KEY_STORAGE));
+            status.textContent = message || `DeepSeek Key：${deepSeekSaved ? '已保存' : '未配置'}；豆包搜索 Key：${doubaoSaved ? '已保存' : '未配置'}。Key 仅存储在当前浏览器。`;
+            status.classList.toggle('error', isError);
+            status.classList.toggle('api-key-saved', !isError && deepSeekSaved && doubaoSaved);
+            document.getElementById('deepseekApiKeyInput').placeholder = deepSeekSaved ? '已保存；留空继续使用' : '首次使用请输入 DeepSeek API Key';
+            document.getElementById('doubaoApiKeyInput').placeholder = doubaoSaved ? '已保存；留空继续使用' : '请输入 IAM API访问密钥页面创建的 API Key';
+        }
+
+        function extractJson(content) {
+            const cleaned = sanitizeText(content).replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+            const start = cleaned.indexOf('{');
+            const end = cleaned.lastIndexOf('}');
+            if (start < 0 || end <= start) throw new Error('DeepSeek 未返回有效 JSON');
+            return JSON.parse(cleaned.slice(start, end + 1));
+        }
+
+        async function callDeepSeek(apiKey, systemPrompt, input) {
+            const response = await fetch(DEEPSEEK_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+                body: JSON.stringify({
+                    model: 'deepseek-chat',
+                    temperature: 0.15,
+                    response_format: { type: 'json_object' },
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: input },
+                    ],
+                }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(`DeepSeek：${payload.error?.message || `HTTP ${response.status}`}`);
+            return extractJson(payload.choices?.[0]?.message?.content || '');
+        }
+
+        function normalizeCandidate(candidate) {
+            const words = (Array.isArray(candidate) ? candidate : String(candidate).split(/[，,、]/))
+                .map(word => sanitizeText(word).trim())
+                .filter(Boolean);
+            if (words.length < 2 || words.length > 3 || new Set(words).size !== words.length) return null;
+            return { words, text: words.join(',') };
+        }
+
+        function normalizeQuery(query) {
+            return sanitizeText(query).replace(/\s+/g, ' ').trim().slice(0, 100);
+        }
+
+        function prepareSearchPlan(data) {
+            const limits = { groupA: 6, groupB: 4, groupC: 2 };
+            const queries = {};
+            Object.entries(limits).forEach(([group, limit]) => {
+                queries[group] = [...new Set((data.queries?.[group] || []).map(normalizeQuery).filter(Boolean))].slice(0, limit);
+                if (queries[group].length !== limit) {
+                    throw new Error(`DeepSeek 生成的 ${group} 搜索 Query 应为 ${limit} 条，实际为 ${queries[group].length} 条`);
+                }
+            });
+            return {
+                eventSummary: sanitizeText(data.eventSummary || '').trim(),
+                coreEntities: (data.coreEntities || []).map(sanitizeText).filter(Boolean),
+                ambiguousEntities: (data.ambiguousEntities || []).map(sanitizeText).filter(Boolean),
+                queries,
+                seedCandidates: (data.seedCandidates || []).map(normalizeCandidate).filter(Boolean),
+            };
+        }
+
+        async function searchWithDoubao(apiKey, query, category) {
+            const response = await fetch(DOUBAO_SEARCH_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+                body: JSON.stringify({
+                    Query: query,
+                    Count: 10,
+                }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.ResponseMetadata?.Error) {
+                throw new Error(payload.ResponseMetadata?.Error?.Message || payload.error || `HTTP ${response.status}`);
+            }
+            return (payload.Result?.WebResults || []).map((item, index) => ({
+                id: '',
+                expectedGroup: category,
+                query,
+                title: sanitizeText(item.Title || ''),
+                site: sanitizeText(item.SiteName || ''),
+                url: sanitizeText(item.Url || ''),
+                publishTime: sanitizeText(item.PublishTime || ''),
+                auth: sanitizeText(item.AuthInfoDes || ''),
+                content: sanitizeText(item.Content || item.Summary || item.Snippet || ''),
+                sortId: item.SortId ?? index,
+            }));
+        }
+
+        async function runSearchPlan(apiKey, searchPlan) {
+            const jobs = Object.entries(searchPlan.queries).flatMap(([category, queries]) =>
+                queries.map(query => ({ category, query }))
+            );
+            const results = [];
+            let successCount = 0;
+            for (let index = 0; index < jobs.length; index += 3) {
+                const batch = jobs.slice(index, index + 3);
+                const settled = await Promise.allSettled(batch.map(job =>
+                    searchWithDoubao(apiKey, job.query, job.category)
+                ));
+                settled.forEach((result, offset) => {
+                    if (result.status === 'fulfilled') {
+                        successCount += 1;
+                        results.push(...result.value);
+                    } else {
+                        aiPipelineState.warnings.push(`${batch[offset].query}：${result.reason?.message || '搜索失败'}`);
+                    }
+                });
+            }
+            if (successCount < 6) throw new Error(`豆包搜索仅成功 ${successCount} 次，样本不足`);
+            const seen = new Set();
+            return results.filter(item => {
+                const key = item.url || `${item.title}|${item.site}|${item.publishTime}`;
+                if (!key || seen.has(key)) return false;
+                seen.add(key);
+                item.id = `sample-${seen.size}`;
+                return true;
+            }).slice(0, 80);
+        }
+
+        function buildSamplePayload(samples) {
+            return samples.map(item => ({
+                id: item.id,
+                expectedGroup: item.expectedGroup,
+                title: item.title,
+                site: item.site,
+                publishTime: item.publishTime,
+                content: item.content.slice(0, 1200),
+            }));
+        }
+
+        function createGroups(source, samples, classification) {
+            const byId = new Map(samples.map(item => [item.id, item]));
+            const assigned = new Set();
+            const groups = {
+                groupA: [{ id: 'source', title: '原始新闻', content: source }],
+                groupB: [],
+                groupC: [],
+            };
+            ['groupA', 'groupB', 'groupC'].forEach(group => {
+                (classification?.[group] || []).forEach(id => {
+                    if (byId.has(id) && !assigned.has(id)) {
+                        assigned.add(id);
+                        groups[group].push(byId.get(id));
+                    }
+                });
+            });
+            return groups;
+        }
+
+        function normalizeMatchText(value) {
+            return sanitizeText(value).normalize('NFKC').toLowerCase().replace(/\s+/g, '');
+        }
+
+        function scoreCandidates(candidateInputs, groups) {
+            const unique = new Map();
+            candidateInputs.map(normalizeCandidate).filter(Boolean).forEach(candidate => unique.set(candidate.text, candidate));
+            const texts = {};
+            Object.entries(groups).forEach(([group, items]) => {
+                texts[group] = items.map(item => ({
+                    ...item,
+                    matchText: normalizeMatchText(`${item.title || ''}\n${item.content || ''}`),
+                }));
+            });
+            const negativeTotal = texts.groupB.length + texts.groupC.length;
+            return [...unique.values()].map((candidate, index) => {
+                const normalizedWords = candidate.words.map(normalizeMatchText);
+                const hitItems = group => texts[group].filter(item =>
+                    normalizedWords.every(word => item.matchText.includes(word))
+                );
+                const aHits = hitItems('groupA');
+                const bHits = hitItems('groupB');
+                const cHits = hitItems('groupC');
+                const falseHits = bHits.length + cHits.length;
+                const recall = aHits.length / texts.groupA.length;
+                const falsePositiveRate = negativeTotal ? falseHits / negativeTotal : null;
+                const precision = (aHits.length + falseHits) ? aHits.length / (aHits.length + falseHits) : 0;
+                const score = Math.max(0, Math.round((
+                    recall * 65
+                    + precision * 25
+                    + (falsePositiveRate === null ? 0 : (1 - falsePositiveRate) * 10)
+                    - (candidate.words.length === 3 ? 3 : 0)
+                ) * 10) / 10);
+                let tier = 'low';
+                if (negativeTotal && score >= 85 && recall >= 0.75 && falsePositiveRate <= 0.05) tier = 'high';
+                else if (score >= 65 && recall >= 0.5 && (falsePositiveRate === null || falsePositiveRate <= 0.15)) tier = 'medium';
+                return {
+                    id: `candidate-${index + 1}`,
+                    ...candidate,
+                    score, recall, precision, falsePositiveRate, tier, initialTier: tier,
+                    hits: { groupA: aHits, groupB: bHits, groupC: cHits },
+                    review: null,
+                };
+            }).sort((a, b) => b.score - a.score);
+        }
+
+        function applyReview(candidates, reviews) {
+            const order = ['low', 'medium', 'high'];
+            const byText = new Map((reviews || []).map(item => [item.text, item]));
+            candidates.forEach(candidate => {
+                const review = byText.get(candidate.text);
+                if (!review) return;
+                const current = order.indexOf(candidate.tier);
+                if (review.action === 'upgrade') candidate.tier = order[Math.min(2, current + 1)];
+                if (review.action === 'downgrade') candidate.tier = order[Math.max(0, current - 1)];
+                if (review.action === 'reject') candidate.tier = 'low';
+                candidate.review = { action: review.action || 'keep', reason: sanitizeText(review.reason || '').slice(0, 120) };
+            });
+        }
+
+        function renderCandidateTiers() {
+            const labels = { high: '高可用', medium: '中可用', low: '低可用' };
+            const container = document.getElementById('candidateTiers');
+            container.innerHTML = '';
+            Object.entries(labels).forEach(([tier, label]) => {
+                const items = aiPipelineState.candidates.filter(item => item.tier === tier);
+                const section = document.createElement('section');
+                section.className = `candidate-tier ${tier}`;
+                section.innerHTML = `
+                    <div class="candidate-tier-header">
+                        <span class="candidate-tier-title">${label}（${items.length}）</span>
+                        <span class="candidate-tier-actions">
+                            <button type="button" data-select-tier="${tier}">全选本档</button>
+                            <button type="button" data-clear-tier="${tier}">取消本档</button>
+                        </span>
+                    </div>
+                    <div class="candidate-list"></div>`;
+                const list = section.querySelector('.candidate-list');
+                if (!items.length) {
+                    list.innerHTML = '<div class="candidate-empty">暂无候选</div>';
+                } else {
+                    items.forEach(item => {
+                        const row = document.createElement('label');
+                        row.className = 'candidate-row';
+                        const falseRate = item.falsePositiveRate === null ? '样本不足' : `${Math.round(item.falsePositiveRate * 100)}%`;
+                        const added = acceptedAiKeywords.includes(item.text);
+                        row.innerHTML = `
+                            <input type="checkbox" class="candidate-checkbox" data-id="${item.id}" ${aiPipelineState.selectedIds.has(item.id) ? 'checked' : ''}>
+                            <span class="candidate-word"></span>
+                            <span class="candidate-metrics"></span>`;
+                        row.querySelector('.candidate-word').textContent = item.text;
+                        const metrics = row.querySelector('.candidate-metrics');
+                        metrics.textContent = `评分 ${item.score}；召回 ${Math.round(item.recall * 100)}%；误伤 ${falseRate}${item.review?.reason ? `；复核：${item.review.reason}` : ''}`;
+                        if (added) {
+                            const addedLabel = document.createElement('span');
+                            addedLabel.className = 'candidate-added';
+                            addedLabel.textContent = '；已加入';
+                            metrics.appendChild(addedLabel);
+                        }
+                        list.appendChild(row);
+                    });
+                }
+                container.appendChild(section);
+            });
+            document.getElementById('aiCandidates').classList.add('show');
+            document.getElementById('candidateSummary').textContent =
+                `Group A ${aiPipelineState.samples.groupA.length} 条，Group B ${aiPipelineState.samples.groupB.length} 条，Group C ${aiPipelineState.samples.groupC.length} 条；${aiPipelineState.warnings.length ? `另有 ${aiPipelineState.warnings.length} 条警告。` : '搜索完整。'}`;
+        }
+
+        function setPipelineStatus(message, isError = false) {
+            aiPipelineState.phase = isError ? 'error' : message;
+            updateApiKeyStatus(message, isError);
+        }
+
+        async function generateWithDeepSeek() {
+            const source = sanitizeText(document.getElementById('newsSourceInput').value).trim();
+            const deepInput = document.getElementById('deepseekApiKeyInput');
+            const doubaoInput = document.getElementById('doubaoApiKeyInput');
+            const deepKey = normalizeApiKey(deepInput.value || getStoredKey(DEEPSEEK_API_KEY_STORAGE));
+            const doubaoKey = normalizeApiKey(doubaoInput.value || getStoredKey(DOUBAO_SEARCH_API_KEY_STORAGE));
+            const button = document.getElementById('aiGenerateBtn');
+            if (!source) return setPipelineStatus('请先输入新闻原文。', true), document.getElementById('newsSourceInput').focus();
+            if (!deepKey) return setPipelineStatus('请输入 DeepSeek API Key。', true), deepInput.focus();
+            if (!doubaoKey) return setPipelineStatus('请输入具有联网问答权限的火山引擎访问控制 API Key。', true), doubaoInput.focus();
+            try {
+                if (deepInput.value.trim()) saveStoredKey(DEEPSEEK_API_KEY_STORAGE, deepKey);
+                if (doubaoInput.value.trim()) saveStoredKey(DOUBAO_SEARCH_API_KEY_STORAGE, doubaoKey);
+                deepInput.value = '';
+                doubaoInput.value = '';
+            } catch {}
+
+            button.disabled = true;
+            button.textContent = '正在生成…';
+            aiPipelineState.source = source;
+            aiPipelineState.warnings = [];
+            aiPipelineState.selectedIds.clear();
+            try {
+                setPipelineStatus('1/9 正在分析新闻原文并生成搜索计划…');
+                const planData = await callDeepSeek(deepKey,
+                    '你是新闻事件检索规划器。只输出JSON。生成6条同事件查询、4条易误伤查询、2条随机新闻查询，以及2至3词的初始候选。字段必须是eventSummary、coreEntities、ambiguousEntities、queries(groupA/groupB/groupC)、seedCandidates。',
+                    `新闻原文：\n${source}`);
+                const plan = prepareSearchPlan(planData);
+                aiPipelineState.eventProfile = plan;
+                aiPipelineState.searchPlan = plan;
+
+                setPipelineStatus('2/9 搜索计划已生成；3-5/9 正在执行豆包联网搜索…');
+                const searchResults = await runSearchPlan(doubaoKey, plan);
+                aiPipelineState.rawSearchResults = searchResults;
+
+                setPipelineStatus('6/9 正在归组搜索样本并扩展候选…');
+                const classifyData = await callDeepSeek(deepKey,
+                    '你是新闻样本分类与管控词候选生成器。只输出JSON。按目标事件将sample ID分入groupA、groupB、groupC、unknown；结合原文和同事件样本生成尽可能少的2至3词候选。返回classification和candidates。',
+                    JSON.stringify({
+                        eventSummary: plan.eventSummary,
+                        coreEntities: plan.coreEntities,
+                        source,
+                        samples: buildSamplePayload(searchResults),
+                        seedCandidates: plan.seedCandidates.map(item => item.words),
+                    }));
+                const groups = createGroups(source, searchResults, classifyData.classification);
+                aiPipelineState.samples = groups;
+
+                setPipelineStatus('7/9 正在本地计算召回、误伤和可用程度…');
+                const candidateInputs = [
+                    ...plan.seedCandidates.map(item => item.words),
+                    ...(classifyData.candidates || []),
+                ];
+                const candidates = scoreCandidates(candidateInputs, groups);
+                if (!candidates.length) throw new Error('未生成合法的2至3词候选');
+
+                const boundary = candidates.filter(item =>
+                    Math.min(Math.abs(item.score - 65), Math.abs(item.score - 85)) <= 8
+                    || (item.recall >= 0.75 && (item.falsePositiveRate || 0) > 0.05)
+                ).slice(0, 20);
+                if (boundary.length) {
+                    setPipelineStatus('8/9 正在让 DeepSeek 复核临界候选…');
+                    try {
+                        const reviewData = await callDeepSeek(deepKey,
+                            '你是候选词组复核器。只输出JSON对象，字段reviews。每项包含text、action(keep/upgrade/downgrade/reject)、reason。最多调整一档，不得修改统计数据。',
+                            JSON.stringify({
+                                eventSummary: plan.eventSummary,
+                                candidates: boundary.map(item => ({
+                                    text: item.text, tier: item.tier, score: item.score,
+                                    recall: item.recall, precision: item.precision,
+                                    falsePositiveRate: item.falsePositiveRate,
+                                    hitTitles: Object.fromEntries(Object.entries(item.hits).map(([key, values]) => [key, values.map(value => value.title).slice(0, 8)])),
+                                })),
+                            }));
+                        applyReview(candidates, reviewData.reviews);
+                    } catch (error) {
+                        aiPipelineState.warnings.push(`临界复核失败：${error.message}`);
+                    }
+                }
+                aiPipelineState.candidates = candidates;
+                renderCandidateTiers();
+                setPipelineStatus(`9/9 完成：生成 ${candidates.length} 个候选，请选择后加入导出结果。`);
+                document.getElementById('aiCandidates').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } catch (error) {
+                const message = error instanceof TypeError
+                    ? '网络或跨域请求失败。若豆包接口不允许浏览器直连，需要启用同源代理。'
+                    : `生成失败：${error.message}`;
+                setPipelineStatus(message, true);
+            } finally {
+                button.disabled = false;
+                button.textContent = '生成管控词组';
+            }
+        }
+
+        function selectCandidateTier(tier, selected) {
+            aiPipelineState.candidates
+                .filter(item => item.tier === tier)
+                .forEach(item => {
+                    if (selected) aiPipelineState.selectedIds.add(item.id);
+                    else aiPipelineState.selectedIds.delete(item.id);
+                });
+            renderCandidateTiers();
+        }
+
+        function addSelectedCandidates() {
+            const selected = aiPipelineState.candidates
+                .filter(item => aiPipelineState.selectedIds.has(item.id))
+                .map(item => item.text);
+            if (!selected.length) {
+                document.getElementById('candidateActionStatus').textContent = '请先选择至少一个候选词组。';
+                return;
+            }
+            const previousSize = acceptedAiKeywords.length;
+            acceptedAiKeywords = [...new Set([...acceptedAiKeywords, ...selected])];
+            updateOutput();
+            renderCandidateTiers();
+            document.getElementById('candidateActionStatus').textContent =
+                `已加入 ${acceptedAiKeywords.length - previousSize} 个新词组，重复项已自动忽略。`;
         }
 
         function getOutputLines() {
@@ -876,6 +1514,27 @@
             window.open(url.toString(), '_blank');
         }
         document.addEventListener('DOMContentLoaded', () => {
+            updateApiKeyStatus();
+            document.getElementById('aiGenerateBtn').addEventListener('click', generateWithDeepSeek);
+            document.getElementById('clearDeepSeekApiKeyBtn').addEventListener('click', () =>
+                clearStoredKey(DEEPSEEK_API_KEY_STORAGE, 'deepseekApiKeyInput', ' DeepSeek API Key')
+            );
+            document.getElementById('clearDoubaoApiKeyBtn').addEventListener('click', () =>
+                clearStoredKey(DOUBAO_SEARCH_API_KEY_STORAGE, 'doubaoApiKeyInput', '豆包搜索 API Key')
+            );
+            document.getElementById('addSelectedCandidatesBtn').addEventListener('click', addSelectedCandidates);
+            document.getElementById('candidateTiers').addEventListener('change', (e) => {
+                const checkbox = e.target.closest('.candidate-checkbox');
+                if (!checkbox) return;
+                if (checkbox.checked) aiPipelineState.selectedIds.add(checkbox.dataset.id);
+                else aiPipelineState.selectedIds.delete(checkbox.dataset.id);
+            });
+            document.getElementById('candidateTiers').addEventListener('click', (e) => {
+                const selectButton = e.target.closest('[data-select-tier]');
+                const clearButton = e.target.closest('[data-clear-tier]');
+                if (selectButton) selectCandidateTier(selectButton.dataset.selectTier, true);
+                if (clearButton) selectCandidateTier(clearButton.dataset.clearTier, false);
+            });
             document.getElementById('addColumnBtn').addEventListener('click', addColumn);
             document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
             document.getElementById('copyBtn').addEventListener('click', copyResult);
