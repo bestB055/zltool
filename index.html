@@ -948,16 +948,42 @@
             document.getElementById('doubaoApiKeyInput').placeholder = doubaoSaved ? '已保存；留空继续使用' : '请输入 IAM API访问密钥页面创建的 API Key';
         }
 
+        // #region debug-point A:reporter
+        const reportDeepSeekDebug = (hypothesisId, msg, data = {}) => fetch('http://127.0.0.1:7777/event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: 'deepseek-json-response', runId: 'pre-fix', hypothesisId, location: 'index.html', msg: `[DEBUG] ${msg}`, data, ts: Date.now() }),
+        }).catch(() => {});
+        // #endregion
+
         function extractJson(content) {
             const cleaned = sanitizeText(content).replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
             const start = cleaned.indexOf('{');
             const end = cleaned.lastIndexOf('}');
-            if (start < 0 || end <= start) throw new Error('DeepSeek 未返回有效 JSON');
-            return JSON.parse(cleaned.slice(start, end + 1));
+            // #region debug-point B:parse-input
+            reportDeepSeekDebug('B', 'JSON 解析输入', { contentType: typeof content, contentLength: String(content || '').length, cleanedLength: cleaned.length, start, end, preview: cleaned.slice(0, 300) });
+            // #endregion
+            if (start < 0 || end <= start) {
+                // #region debug-point D:non-json-content
+                reportDeepSeekDebug('D', '未找到完整 JSON 对象边界', { preview: cleaned.slice(0, 300) });
+                // #endregion
+                throw new Error('DeepSeek 未返回有效 JSON');
+            }
+            try {
+                return JSON.parse(cleaned.slice(start, end + 1));
+            } catch (error) {
+                // #region debug-point C:parse-failure
+                reportDeepSeekDebug('C', 'JSON.parse 失败', { message: error.message, preview: cleaned.slice(start, Math.min(end + 1, start + 500)) });
+                // #endregion
+                throw error;
+            }
         }
 
         async function callDeepSeek(apiKey, systemPrompt, input) {
             const useJson = /json/i.test(systemPrompt);
+            // #region debug-point D:request-mode
+            reportDeepSeekDebug('D', 'DeepSeek 请求模式', { useJson, promptPreview: systemPrompt.slice(0, 120), inputLength: String(input || '').length });
+            // #endregion
             const body = {
                 model: 'deepseek-chat',
                 temperature: 0.15,
@@ -973,6 +999,9 @@
                 body: JSON.stringify(body),
             });
             const payload = await response.json().catch(() => ({}));
+            // #region debug-point A:response-shape
+            reportDeepSeekDebug('A', 'DeepSeek 响应结构', { ok: response.ok, status: response.status, payloadKeys: Object.keys(payload), choiceCount: Array.isArray(payload.choices) ? payload.choices.length : null, contentType: typeof payload.choices?.[0]?.message?.content, contentLength: String(payload.choices?.[0]?.message?.content || '').length });
+            // #endregion
             if (!response.ok) throw new Error(`DeepSeek：${payload.error?.message || `HTTP ${response.status}`}`);
             return extractJson(payload.choices?.[0]?.message?.content || '');
         }
