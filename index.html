@@ -805,11 +805,13 @@
         </div>
     </div>
 
+    <script src="app-config.js"></script>
     <script>
         const MAX_COLUMNS = 5;
         const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
         const DEEPSEEK_API_KEY_STORAGE = 'split-word-deepseek-api-key';
-        const DOUBAO_SEARCH_API_URL = '/.netlify/functions/doubao-search';
+        const DEPLOYMENT_CONFIG = window.DAIBAN_HOME_CONFIG || {};
+        const DOUBAO_SEARCH_API_URL = String(DEPLOYMENT_CONFIG.DOUBAO_SEARCH_API_URL || '').trim();
         const DOUBAO_SEARCH_API_KEY_STORAGE = 'split-word-doubao-search-api-key';
         let columnCount = 2;
         let manualKeywords = [];
@@ -1213,6 +1215,7 @@
             const doubaoKey = normalizeApiKey(doubaoInput.value || getStoredKey(DOUBAO_SEARCH_API_KEY_STORAGE));
             const button = document.getElementById('aiGenerateBtn');
             if (!source) return setPipelineStatus('请先输入新闻原文。', true), document.getElementById('newsSourceInput').focus();
+            if (!DOUBAO_SEARCH_API_URL) return setPipelineStatus('请先配置 Cloudflare Worker 搜索代理地址。', true);
             if (!deepKey) return setPipelineStatus('请输入 DeepSeek API Key。', true), deepInput.focus();
             if (!doubaoKey) return setPipelineStatus('请输入具有联网问答权限的火山引擎访问控制 API Key。', true), doubaoInput.focus();
             try {

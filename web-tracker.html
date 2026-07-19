@@ -471,11 +471,11 @@
         <section class="tool-header">
             <a class="home-link" href="home.html">← 返回带班首页</a>
             <h1>网页追踪</h1>
-            <p class="tool-subtitle">输入目标网页、追踪区域和关键词，确认监测时长与密度后创建后台监听任务。第一版使用字节云函数作为抓取与定时执行层，页面内展示新动态提醒。</p>
+            <p class="tool-subtitle">输入目标网页、追踪区域和关键词，确认监测时长与密度后创建后台监听任务。第二阶段建议接入 Cloudflare Worker、Cron 与 KV/D1 作为抓取、定时执行和存储层。</p>
         </section>
 
         <div class="notice" id="configNotice">
-            字节云函数后端地址尚未配置。请在本页脚本中设置 <strong>TRACKER_API_BASE_URL</strong>，否则只能查看前端界面，无法创建后台监听任务。
+            网页追踪后端地址尚未配置。请在本页脚本中设置 <strong>TRACKER_API_BASE_URL</strong>；第二阶段建议使用 Cloudflare Worker + Cron + KV/D1，否则只能查看前端界面，无法创建后台监听任务。
         </div>
 
         <div class="notice" id="changeNotice"></div>
@@ -556,7 +556,7 @@
             <div class="section-header">
                 <div>
                     <h2 class="section-title">任务状态</h2>
-                    <p class="section-desc">页面打开时会定时拉取任务状态；关闭页面后，后台监听依赖字节云函数定时触发器继续执行。</p>
+                    <p class="section-desc">页面打开时会定时拉取任务状态；关闭页面后，后台监听依赖第二阶段的 Cloudflare Worker Cron 继续执行。</p>
                 </div>
                 <button class="btn" type="button" id="refreshBtn">刷新任务</button>
             </div>
@@ -577,7 +577,7 @@
             </div>
 
             <div class="task-list" id="taskList">
-                <div class="empty">暂无任务。配置字节云函数后，可创建后台监听任务。</div>
+                <div class="empty">暂无任务。配置 Cloudflare Worker 后，可创建后台监听任务。</div>
             </div>
         </section>
 
@@ -597,6 +597,7 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script>
+        // 第一阶段仅迁移现有可用功能；网页追踪后端留待第二阶段接入 Cloudflare Worker + Cron + KV/D1。
         const TRACKER_API_BASE_URL = '';
         const LOCAL_UI_STATE_KEY = 'webTrackerUiState';
 
@@ -710,7 +711,7 @@
 
         async function requestApi(path, options = {}) {
             if (!hasApiBase()) {
-                throw new Error('字节云函数后端地址尚未配置');
+                throw new Error('网页追踪后端地址尚未配置');
             }
 
             const response = await fetch(`${normalizeApiBase()}/${path}`, {
@@ -835,7 +836,7 @@
             elements.activeCount.textContent = String(activeTasks.length);
 
             if (state.tasks.length === 0) {
-                elements.taskList.innerHTML = '<div class="empty">暂无任务。配置字节云函数后，可创建后台监听任务。</div>';
+                elements.taskList.innerHTML = '<div class="empty">暂无任务。配置 Cloudflare Worker 后，可创建后台监听任务。</div>';
                 return;
             }
 
