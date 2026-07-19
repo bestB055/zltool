@@ -957,18 +957,20 @@
         }
 
         async function callDeepSeek(apiKey, systemPrompt, input) {
+            const useJson = /json/i.test(systemPrompt);
+            const body = {
+                model: 'deepseek-chat',
+                temperature: 0.15,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: input },
+                ],
+            };
+            if (useJson) body.response_format = { type: 'json_object' };
             const response = await fetch(DEEPSEEK_API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-                body: JSON.stringify({
-                    model: 'deepseek-chat',
-                    temperature: 0.15,
-                    response_format: { type: 'json_object' },
-                    messages: [
-                        { role: 'system', content: systemPrompt },
-                        { role: 'user', content: input },
-                    ],
-                }),
+                body: JSON.stringify(body),
             });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(`DeepSeek：${payload.error?.message || `HTTP ${response.status}`}`);
