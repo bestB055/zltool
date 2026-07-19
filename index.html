@@ -983,17 +983,71 @@
             return { words, text: words.join(',') };
         }
 
+        // 后备候选提取：当 DeepSeek 未生成足够候选时，从原文中提取 2-3 词组合
+        function extractFallbackCandidates(source, plan) {
+            const candidates = [];
+            const seen = new Set();
+            const add = (words) => {
+                const c = normalizeCandidate(words);
+                if (c && !seen.has(c.text)) {
+                    seen.add(c.text);
+                    candidates.push(c);
+                }
+            };
+
+            // 1. 从核心实体中生成 2-3 词组合
+            const entities = (plan?.coreEntities || []).filter(e => e.length >= 2 && e.length <= 12);
+            if (entities.length >= 2) {
+                for (let i = 0; i < entities.length; i++) {
+                    for (let j = i + 1; j < entities.length; j++) {
+                        add([entities[i], entities[j]]);
+                        if (j + 1 < entities.length) add([entities[i], entities[j], entities[j + 1]]);
+                    }
+                }
+            }
+
+            // 2. 从事件摘要中提取中文关键词（按标点/空格切分后取 2-4 字词）
+            const summary = plan?.eventSummary || source;
+            const tokens = summary
+                .replace(/[，。！？、；：""''（）\n\r]/g, ' ')
+                .split(/\s+/)
+                .filter(t => t.length >= 2 && t.length <= 8 && !/^\d+$/.test(t));
+            const uniqueTokens = [...new Set(tokens)];
+            if (uniqueTokens.length >= 2) {
+                for (let i = 0; i < Math.min(uniqueTokens.length, 6); i++) {
+                    for (let j = i + 1; j < Math.min(uniqueTokens.length, 6); j++) {
+                        add([uniqueTokens[i], uniqueTokens[j]]);
+                    }
+                }
+            }
+
+            // 3. 从原文中提取连续 2-3 词短语（滑动窗口）
+            const cleaned = source.replace(/[，。！？、；：""''（）\n\r]/g, ' ').replace(/\s+/g, ' ').trim();
+            const allWords = cleaned.split(' ').filter(w => w.length >= 2 && w.length <= 8 && !/^\d+$/.test(w));
+            for (let i = 0; i < allWords.length - 1; i++) {
+                add([allWords[i], allWords[i + 1]]);
+                if (i + 2 < allWords.length) add([allWords[i], allWords[i + 1], allWords[i + 2]]);
+            }
+
+            return candidates;
+        }
+
         function normalizeQuery(query) {
             return sanitizeText(query).replace(/\s+/g, ' ').trim().slice(0, 100);
         }
 
         function prepareSearchPlan(data) {
-            const limits = { groupA: 6, groupB: 4, groupC: 2 };
+            // 理想数量：groupA 6、groupB 4、groupC 2；短输入场景下最低要求 2/1/1
+            const ideal = { groupA: 6, groupB: 4, groupC: 2 };
+            const minimum = { groupA: 2, groupB: 1, groupC: 1 };
             const queries = {};
-            Object.entries(limits).forEach(([group, limit]) => {
+            Object.entries(ideal).forEach(([group, limit]) => {
                 queries[group] = [...new Set((data.queries?.[group] || []).map(normalizeQuery).filter(Boolean))].slice(0, limit);
-                if (queries[group].length !== limit) {
-                    throw new Error(`DeepSeek 生成的 ${group} 搜索 Query 应为 ${limit} 条，实际为 ${queries[group].length} 条`);
+                if (queries[group].length < minimum[group]) {
+                    throw new Error(`DeepSeek 生成的 ${group} 搜索 Query 不足（需要至少 ${minimum[group]} 条，实际 ${queries[group].length} 条）。请尝试提供更详细的新闻描述。`);
+                }
+                if (queries[group].length < limit) {
+                    aiPipelineState.warnings.push(`${group} 搜索 Query 仅 ${queries[group].length} 条（理想 ${limit} 条），样本可能不足`);
                 }
             });
             return {
@@ -1052,7 +1106,9 @@
                     }
                 });
             }
-            if (successCount < 6) throw new Error(`豆包搜索仅成功 ${successCount} 次，样本不足`);
+            // 动态阈值：至少成功一半且不少于 3 次；短输入场景下 Query 总数可能少于 12
+            const minSuccess = Math.max(3, Math.ceil(jobs.length / 2));
+            if (successCount < minSuccess) throw new Error(`豆包搜索仅成功 ${successCount}/${jobs.length} 次（需要至少 ${minSuccess} 次），样本不足`);
             const seen = new Set();
             return results.filter(item => {
                 const key = item.url || `${item.title}|${item.site}|${item.publishTime}`;
@@ -1210,18 +1266,27 @@
         // 前置步骤：用豆包搜索 + DeepSeek 补全短新闻为完整原文
         async function enrichNewsWithDeepSeek(deepKey, doubaoKey, userInput) {
             // 1. 用豆包搜索用户输入的短句，获取相关新闻
-            const searchResults = await searchWithDoubao(doubaoKey, userInput, 'enrichment');
-            if (!searchResults.length) return userInput;
+            let searchResults = [];
+            try {
+                searchResults = await searchWithDoubao(doubaoKey, userInput, 'enrichment');
+            } catch {
+                // 搜索失败不阻断流程，继续尝试用 DeepSeek 自身知识补全
+            }
 
-            // 2. 把搜索结果喂给 DeepSeek，让它补全为完整新闻原文
-            const payload = searchResults.slice(0, 8).map((item, i) =>
-                `[${i + 1}] 标题：${item.title}\n来源：${item.site}\n内容：${item.content.slice(0, 800)}`
-            ).join('\n\n');
+            // 2. 构建 Prompt：有搜索结果时基于结果补全，无结果时基于自身知识扩展
+            let prompt, context;
+            if (searchResults.length) {
+                const payload = searchResults.slice(0, 8).map((item, i) =>
+                    `[${i + 1}] 标题：${item.title}\n来源：${item.site}\n内容：${item.content.slice(0, 800)}`
+                ).join('\n\n');
+                prompt = '你是一名新闻编辑。用户提供了一句简短的事件描述和若干搜索结果。请根据搜索结果，还原出该事件的完整新闻原文（300-800字），包含时间、地点、人物、经过、结果等要素。只输出新闻正文，不要加任何说明。';
+                context = `用户输入：${userInput}\n\n搜索结果：\n${payload}`;
+            } else {
+                prompt = '你是一名新闻编辑。用户提供了一句简短的事件描述。请根据你的知识，扩展出该事件的完整新闻原文（200-500字），包含时间、地点、人物、经过、结果等要素。如果信息不足，请基于合理推断补充。只输出新闻正文，不要加任何说明。';
+                context = `用户输入：${userInput}`;
+            }
 
-            const enriched = await callDeepSeek(deepKey,
-                '你是一名新闻编辑。用户提供了一句简短的事件描述和若干搜索结果。请根据搜索结果，还原出该事件的完整新闻原文（300-800字），包含时间、地点、人物、经过、结果等要素。只输出新闻正文，不要加任何说明。',
-                `用户输入：${userInput}\n\n搜索结果：\n${payload}`
-            );
+            const enriched = await callDeepSeek(deepKey, prompt, context);
 
             return enriched && enriched.trim().length > userInput.length ? enriched.trim() : userInput;
         }
@@ -1257,7 +1322,7 @@
                 // 2/10: 用补全后的原文生成搜索计划
                 setPipelineStatus('2/10 正在分析新闻原文并生成搜索计划…');
                 const planData = await callDeepSeek(deepKey,
-                    '你是新闻事件检索规划器。只输出JSON。生成6条同事件查询、4条易误伤查询、2条随机新闻查询，以及2至3词的初始候选。字段必须是eventSummary、coreEntities、ambiguousEntities、queries(groupA/groupB/groupC)、seedCandidates。',
+                    '你是新闻事件检索规划器。只输出JSON。根据新闻原文生成搜索计划：groupA同事件查询（尽量6条，至少2条）、groupB易误伤查询（尽量4条，至少1条）、groupC随机新闻查询（尽量2条，至少1条）。同时提取eventSummary、coreEntities、ambiguousEntities，并生成2至3词的初始候选词组seedCandidates。若原文信息不足，请基于合理推断补充。',
                     `新闻原文：\n${enrichedSource}`);
                 const plan = prepareSearchPlan(planData);
                 aiPipelineState.eventProfile = plan;
@@ -1269,7 +1334,7 @@
 
                 setPipelineStatus('7/10 正在归组搜索样本并扩展候选…');
                 const classifyData = await callDeepSeek(deepKey,
-                    '你是新闻样本分类与管控词候选生成器。只输出JSON。按目标事件将sample ID分入groupA、groupB、groupC、unknown；结合原文和同事件样本生成尽可能少的2至3词候选。返回classification和candidates。',
+                    '你是新闻样本分类与管控词候选生成器。只输出JSON。按目标事件将sample ID分入groupA、groupB、groupC、unknown；结合原文和同事件样本生成尽可能少的2至3词候选（至少生成2个）。若样本不足，可基于事件摘要和核心实体推断候选。返回classification和candidates。',
                     JSON.stringify({
                         eventSummary: plan.eventSummary,
                         coreEntities: plan.coreEntities,
@@ -1281,12 +1346,20 @@
                 aiPipelineState.samples = groups;
 
                 setPipelineStatus('8/10 正在本地计算召回、误伤和可用程度…');
-                const candidateInputs = [
+                let candidateInputs = [
                     ...plan.seedCandidates.map(item => item.words),
                     ...(classifyData.candidates || []),
                 ];
+                // 短输入场景下 DeepSeek 可能未生成足够候选，启用后备提取
+                if (candidateInputs.length < 3) {
+                    const fallback = extractFallbackCandidates(enrichedSource, plan);
+                    if (fallback.length) {
+                        aiPipelineState.warnings.push(`DeepSeek 仅生成 ${candidateInputs.length} 个候选，已从原文补充 ${fallback.length} 个后备候选`);
+                        candidateInputs = [...candidateInputs, ...fallback.map(c => c.words)];
+                    }
+                }
                 const candidates = scoreCandidates(candidateInputs, groups);
-                if (!candidates.length) throw new Error('未生成合法的2至3词候选');
+                if (!candidates.length) throw new Error('未生成合法的2至3词候选。请尝试提供更详细的新闻描述，或手动输入关键词。');
 
                 const boundary = candidates.filter(item =>
                     Math.min(Math.abs(item.score - 65), Math.abs(item.score - 85)) <= 8
