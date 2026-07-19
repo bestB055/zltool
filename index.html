@@ -1207,6 +1207,25 @@
             updateApiKeyStatus(message, isError);
         }
 
+        // 前置步骤：用豆包搜索 + DeepSeek 补全短新闻为完整原文
+        async function enrichNewsWithDeepSeek(deepKey, doubaoKey, userInput) {
+            // 1. 用豆包搜索用户输入的短句，获取相关新闻
+            const searchResults = await searchWithDoubao(doubaoKey, userInput, 'enrichment');
+            if (!searchResults.length) return userInput;
+
+            // 2. 把搜索结果喂给 DeepSeek，让它补全为完整新闻原文
+            const payload = searchResults.slice(0, 8).map((item, i) =>
+                `[${i + 1}] 标题：${item.title}\n来源：${item.site}\n内容：${item.content.slice(0, 800)}`
+            ).join('\n\n');
+
+            const enriched = await callDeepSeek(deepKey,
+                '你是一名新闻编辑。用户提供了一句简短的事件描述和若干搜索结果。请根据搜索结果，还原出该事件的完整新闻原文（300-800字），包含时间、地点、人物、经过、结果等要素。只输出新闻正文，不要加任何说明。',
+                `用户输入：${userInput}\n\n搜索结果：\n${payload}`
+            );
+
+            return enriched && enriched.trim().length > userInput.length ? enriched.trim() : userInput;
+        }
+
         async function generateWithDeepSeek() {
             const source = sanitizeText(document.getElementById('newsSourceInput').value).trim();
             const deepInput = document.getElementById('deepseekApiKeyInput');
@@ -1231,32 +1250,37 @@
             aiPipelineState.warnings = [];
             aiPipelineState.selectedIds.clear();
             try {
-                setPipelineStatus('1/9 正在分析新闻原文并生成搜索计划…');
+                // 1/10: 搜索原文 + DeepSeek 补全为完整新闻
+                setPipelineStatus('1/10 正在搜索原文以补全新闻内容…');
+                const enrichedSource = await enrichNewsWithDeepSeek(deepKey, doubaoKey, source);
+
+                // 2/10: 用补全后的原文生成搜索计划
+                setPipelineStatus('2/10 正在分析新闻原文并生成搜索计划…');
                 const planData = await callDeepSeek(deepKey,
                     '你是新闻事件检索规划器。只输出JSON。生成6条同事件查询、4条易误伤查询、2条随机新闻查询，以及2至3词的初始候选。字段必须是eventSummary、coreEntities、ambiguousEntities、queries(groupA/groupB/groupC)、seedCandidates。',
-                    `新闻原文：\n${source}`);
+                    `新闻原文：\n${enrichedSource}`);
                 const plan = prepareSearchPlan(planData);
                 aiPipelineState.eventProfile = plan;
                 aiPipelineState.searchPlan = plan;
 
-                setPipelineStatus('2/9 搜索计划已生成；3-5/9 正在执行豆包联网搜索…');
+                setPipelineStatus('3/10 搜索计划已生成；4-6/10 正在执行豆包联网搜索…');
                 const searchResults = await runSearchPlan(doubaoKey, plan);
                 aiPipelineState.rawSearchResults = searchResults;
 
-                setPipelineStatus('6/9 正在归组搜索样本并扩展候选…');
+                setPipelineStatus('7/10 正在归组搜索样本并扩展候选…');
                 const classifyData = await callDeepSeek(deepKey,
                     '你是新闻样本分类与管控词候选生成器。只输出JSON。按目标事件将sample ID分入groupA、groupB、groupC、unknown；结合原文和同事件样本生成尽可能少的2至3词候选。返回classification和candidates。',
                     JSON.stringify({
                         eventSummary: plan.eventSummary,
                         coreEntities: plan.coreEntities,
-                        source,
+                        source: enrichedSource,
                         samples: buildSamplePayload(searchResults),
                         seedCandidates: plan.seedCandidates.map(item => item.words),
                     }));
-                const groups = createGroups(source, searchResults, classifyData.classification);
+                const groups = createGroups(enrichedSource, searchResults, classifyData.classification);
                 aiPipelineState.samples = groups;
 
-                setPipelineStatus('7/9 正在本地计算召回、误伤和可用程度…');
+                setPipelineStatus('8/10 正在本地计算召回、误伤和可用程度…');
                 const candidateInputs = [
                     ...plan.seedCandidates.map(item => item.words),
                     ...(classifyData.candidates || []),
@@ -1269,7 +1293,7 @@
                     || (item.recall >= 0.75 && (item.falsePositiveRate || 0) > 0.05)
                 ).slice(0, 20);
                 if (boundary.length) {
-                    setPipelineStatus('8/9 正在让 DeepSeek 复核临界候选…');
+                    setPipelineStatus('9/10 正在让 DeepSeek 复核临界候选…');
                     try {
                         const reviewData = await callDeepSeek(deepKey,
                             '你是候选词组复核器。只输出JSON对象，字段reviews。每项包含text、action(keep/upgrade/downgrade/reject)、reason。最多调整一档，不得修改统计数据。',
@@ -1289,7 +1313,7 @@
                 }
                 aiPipelineState.candidates = candidates;
                 renderCandidateTiers();
-                setPipelineStatus(`9/9 完成：生成 ${candidates.length} 个候选，请选择后加入导出结果。`);
+                setPipelineStatus(`10/10 完成：生成 ${candidates.length} 个候选，请选择后加入导出结果。`);
                 document.getElementById('aiCandidates').scrollIntoView({ behavior: 'smooth', block: 'start' });
             } catch (error) {
                 const message = error instanceof TypeError
