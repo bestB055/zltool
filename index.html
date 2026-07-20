@@ -1639,9 +1639,8 @@
                 '你是中文新闻检索规划器，只输出JSON对象。返回queries数组，提供3条不重复、适合检索近一个月新闻的简短搜索词。输入可能含新闻链接；若含链接，须提取其标题或核心事件再生成查询。第一条应最贴近原始事件，另两条补充事件主体、地点或处理进展。不得编造事实。',
                 JSON.stringify({ source }),
             );
-            const queries = [...new Set([source, ...toStringArray(data.queries, 3)]
-                .map(normalizeQuery)
-                .filter(Boolean))].slice(0, 3);
+            // 原始输入可能过长，不适合直接作为搜索词；完全依赖 DeepSeek 生成的查询。
+            const queries = toStringArray(data.queries, 5).map(normalizeQuery).filter(Boolean).slice(0, 3);
             if (!queries.length) throw new Error('未能生成可用的联网检索词');
             return queries;
         }
@@ -1662,7 +1661,10 @@
                     samples.push(item);
                 });
             });
-            if (!samples.length) throw new Error('联网搜索未返回可用新闻，请检查搜索 API Key 或更换更具体的标题');
+            if (!samples.length) {
+                const reasons = aiPipelineState.warnings.slice(-3).join('；');
+                throw new Error(`联网搜索未返回可用新闻。${reasons ? `详情：${reasons}` : '请检查搜索 API Key 或更换更具体的标题。'}`);
+            }
             return samples;
         }
 
