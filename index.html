@@ -1652,12 +1652,18 @@
             ['action', '关键动作'],
         ];
 
-        function normalizeKeywordTerm(value) {
+        function normalizeKeywordTerm(value, category = '') {
             const term = sanitizeText(value)
                 .replace(/^['"`“”‘’]+|['"`“”‘’]+$/g, '')
                 .replace(/\s+/g, '')
                 .trim();
-            if (!term || term.length < 2 || term.length > 20 || /[。！？；：]/.test(term)) return '';
+            if (!term || term.length < 2 || term.length > 14 || /[。！？；：]/.test(term)) return '';
+            const entitySuffixPattern = /(队|局|部|委|办|厅|院|所|站|馆|校|厂|店|村|镇|区|县|市|省|国|公司|集团|学校|大学|医院|景区|公园|政府|法院|平台|品牌|长城)$/;
+            const overComposedPattern = /(事件|事故|问题|情况|过程|行为|争议|风波|通报|处理)$/;
+            const actionChainPattern = /(被|遭|反遭|导致|引发|造成|劝阻|辱骂|插队|回应|处置|处理|通报)/;
+            if (term.length > 8 && overComposedPattern.test(term)) return '';
+            if (term.length > 8 && actionChainPattern.test(term) && !entitySuffixPattern.test(term)) return '';
+            if ((category === 'event' || category === 'action') && term.length > 8) return '';
             return term;
         }
 
@@ -1666,7 +1672,7 @@
             KEYWORD_CATEGORIES.forEach(([category]) => {
                 const items = Array.isArray(data?.categories?.[category]) ? data.categories[category] : [];
                 items.forEach(item => {
-                    const term = normalizeKeywordTerm(item?.term ?? item);
+                    const term = normalizeKeywordTerm(item?.term ?? item, category);
                     if (!term) return;
                     const key = normalizeMatchText(term);
                     if (unique.has(key)) return;
@@ -1862,7 +1868,7 @@
 eventSummary：用20至30个汉字概括最终事实、定性结果、过程或处置。
 sources：从搜索结果中选3至5条最相关且尽量为近一个月的新闻，返回{"title":"标题","url":"链接"}；不得编造链接。
 categories必须含event、person、location、action四个数组，其中person代表“主体”。每项格式为{"term":"完整词语","tier":"high|medium|low","origin":"evidence|inferred","relevance":0-100,"reason":"简短依据"}。
-term必须是可独立命中的完整关键词，关键是意义完整独立、颗粒度达标，不要机械限制字数。禁止机械按两个字切分专名、队名、机构名、品牌名、部门名、地名和人名，例如“阿根廷队”必须保留为“阿根廷队”，不得拆成“阿根”“廷队”。只有明确由多个独立概念组成的长短语才可拆成自然词，例如“新增确诊”可拆为“新增”“确诊”。近义词、同义词、口语词必须归入对应四类，不能另建分类。
+term必须兼顾“意思完整”和“含义简洁”：目标是高效召回新闻相关文本，不是复述标题。优先输出可组合、可独立检索的短颗粒词，一般为2至6字；专名、队名、机构名、品牌名、部门名、地名和人名可适当更长但必须保持完整，例如“阿根廷队”“重庆市教育局”可以保留。禁止机械按两个字切分专名，例如“阿根廷队”不得拆成“阿根”“廷队”。禁止输出意义过杂、文本过长、包含多个主体/地点/动作/结果的复合短语，例如“慕田峪长城导游插队辱骂事件”“女游客劝阻反遭辱骂”不合格，应拆成“慕田峪”“长城”“导游”“插队”“辱骂”“女游客”“劝阻”等自然关键词。近义词、同义词、口语词必须归入对应四类，不能另建分类。
 event：事件最终事实、定性结果、全过程涉及的核心事件名词，至少输出12个，覆盖事件名、定性、后果、趋势、处置状态、同义表达。
 person：新闻行为主体和参与主体，不限于当事人，还包括品牌、部门、机构、组织、平台、产品、球队、国家、群体、身份、物品名称、人物姓名、别称和昵称。
 location：具体省市区县乡村镇街道、场所、平台、单位、场景，以及地名别称；输入较泛时可结合证据扩展周边具体地名。
