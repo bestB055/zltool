@@ -851,6 +851,9 @@
                 validCandidates: 0,
                 repairedCandidates: 0,
                 fallbackCandidates: 0,
+                locationTerms: 0,
+                behaviorTerms: 0,
+                coverageCandidates: 0,
                 rejectedCandidates: [],
             },
         };
@@ -1069,6 +1072,53 @@
             const term = sanitizeText(value).replace(/^['"`“”‘’]+|['"`“”‘’]+$/g, '').trim();
             if (!term || term.length > 16 || /^\d+$/.test(term) || GENERIC_TERMS.has(term)) return '';
             return term;
+        }
+
+        function normalizeAxisTerms(items, defaultOrigin = 'evidence') {
+            const unique = new Map();
+            (Array.isArray(items) ? items : []).forEach(item => {
+                const rawTerm = item && typeof item === 'object' ? (item.term ?? item.text ?? item.name) : item;
+                const term = normalizeTerm(rawTerm);
+                if (!term) return;
+                const rawOrigin = item && typeof item === 'object' ? item.origin : defaultOrigin;
+                const origin = rawOrigin === 'inferred' ? 'inferred' : 'evidence';
+                const reason = item && typeof item === 'object' ? sanitizeText(item.reason || '').trim() : '';
+                const key = normalizeMatchText(term);
+                const current = unique.get(key);
+                if (!current || (current.origin === 'inferred' && origin === 'evidence')) {
+                    unique.set(key, { term, origin, reason });
+                }
+            });
+            return [...unique.values()];
+        }
+
+        // 人工编辑的核心模式是“限定实体轴 × 事件表达轴”，优先生成覆盖式二词组合。
+        function buildCoverageCandidates(dossier) {
+            const allLocations = normalizeAxisTerms(dossier?.locationTerms);
+            const shortLocations = allLocations.filter(item => item.term.length <= 6);
+            const locations = (shortLocations.length >= 2 ? shortLocations : allLocations).slice(0, 5);
+            const behaviors = normalizeAxisTerms(dossier?.behaviorTerms)
+                .filter(item => item.term.length <= 8)
+                .slice(0, 10);
+            const candidates = [];
+            locations.forEach(location => {
+                behaviors.forEach(behavior => {
+                    const isInferred = location.origin === 'inferred' || behavior.origin === 'inferred';
+                    const candidate = normalizeCandidate({
+                        words: [location.term, behavior.term],
+                        origin: isInferred ? 'inferred' : 'evidence',
+                        isInferred,
+                        reason: `覆盖组合：地点“${location.term}” × 表达“${behavior.term}”`,
+                        sourceTerms: [location.term, behavior.term],
+                    }, isInferred ? 'inferred' : 'evidence');
+                    if (candidate) candidates.push(candidate);
+                });
+            });
+            return {
+                locations,
+                behaviors,
+                candidates: normalizeCandidateList(candidates),
+            };
         }
 
         function buildFallbackCandidates(source, dossier, plan, existingCandidates = []) {
@@ -1352,7 +1402,7 @@
             const d = aiPipelineState.diagnostics;
             const rejectedSummary = [...new Set(d.rejectedCandidates)].slice(0, 3).join('、');
             document.getElementById('candidateSummary').textContent =
-                `补充搜索 ${d.enrichmentSuccesses}/${d.enrichmentQueries} 次，去重样本 ${d.enrichmentSamples} 条；证据事实 ${d.verifiedFacts} 条，推断事实 ${d.inferredFacts} 条；原始候选 ${d.rawCandidates} 个，有效 ${d.validCandidates} 个，修复补充 ${d.repairedCandidates} 个，本地补充 ${d.fallbackCandidates} 个。Group A ${aiPipelineState.samples.groupA.length} 条，Group B ${aiPipelineState.samples.groupB.length} 条，Group C ${aiPipelineState.samples.groupC.length} 条。${rejectedSummary ? `候选过滤：${rejectedSummary}。` : ''}${aiPipelineState.warnings.length ? `另有 ${aiPipelineState.warnings.length} 条警告。` : ''}`;
+                `补充搜索 ${d.enrichmentSuccesses}/${d.enrichmentQueries} 次，去重样本 ${d.enrichmentSamples} 条；地点轴 ${d.locationTerms} 个，表达轴 ${d.behaviorTerms} 个，覆盖组合 ${d.coverageCandidates} 个；证据事实 ${d.verifiedFacts} 条，推断事实 ${d.inferredFacts} 条；模型候选 ${d.rawCandidates} 个，最终有效 ${d.validCandidates} 个，修复补充 ${d.repairedCandidates} 个，本地补充 ${d.fallbackCandidates} 个。Group A ${aiPipelineState.samples.groupA.length} 条，Group B ${aiPipelineState.samples.groupB.length} 条，Group C ${aiPipelineState.samples.groupC.length} 条。${rejectedSummary ? `候选过滤：${rejectedSummary}。` : ''}${aiPipelineState.warnings.length ? `另有 ${aiPipelineState.warnings.length} 条警告。` : ''}`;
         }
 
         function setPipelineStatus(message, isError = false) {
@@ -1371,6 +1421,8 @@
             const coreEntities = toStringArray(data.coreEntities, 8).map(normalizeTerm).filter(Boolean);
             const candidateTerms = toStringArray(data.candidateTerms, 10).map(normalizeTerm).filter(Boolean);
             const inferredEntities = toStringArray(data.inferredEntities, 6).map(normalizeTerm).filter(Boolean);
+            const locationTerms = normalizeAxisTerms(data.locationTerms, 'evidence');
+            const behaviorTerms = normalizeAxisTerms(data.behaviorTerms, 'evidence');
             const enrichmentQueries = [...new Set([
                 normalizeQuery(source),
                 ...toStringArray(data.enrichmentQueries, 6).map(normalizeQuery),
@@ -1383,6 +1435,8 @@
                 coreEntities,
                 candidateTerms,
                 inferredEntities,
+                locationTerms,
+                behaviorTerms,
                 enrichmentQueries,
             };
         }
@@ -1391,7 +1445,7 @@
             const data = await callDeepSeekJson(
                 deepKey,
                 '事件线索分析',
-                '你是新闻事件线索分析器，只输出JSON对象。输入通常只有一句话。返回eventSummary、expandedSource、verifiedFacts、inferredFacts、coreEntities、candidateTerms、inferredEntities、enrichmentQueries。coreEntities和candidateTerms必须是2至16字的原子词；enrichmentQueries生成3至5条，覆盖原句、实体组合、标题化查询和官方通报查询。无法确认的内容放入inferredFacts或inferredEntities，不得混入verifiedFacts。',
+                '你是新闻管控规则编辑，只输出JSON对象。输入通常只有一句话。返回eventSummary、expandedSource、verifiedFacts、inferredFacts、coreEntities、candidateTerms、inferredEntities、locationTerms、behaviorTerms、enrichmentQueries。locationTerms和behaviorTerms每项格式为{"term":"原子词","origin":"evidence或inferred","reason":"来源"}。locationTerms要提取可独立命中的行政区简称、地标简称、园区简称、河湖水体名、街乡镇名，禁止只保留完整长地名；behaviorTerms要扩展同一风险场景的原文行为、规范同义词、常见口语表达、活动方式和风险后果。比如涉水场景应考虑野泳、跳水、桨板、涉水、玩水、游泳、户外游泳、下饺子、溺水等，但必须结合当前事件。enrichmentQueries生成3至6条，专门搜索地标内部水体名、属地简称、行为同义词、媒体口语写法和官方通报。无法确认的内容标inferred。',
                 JSON.stringify({ source }),
             );
             return prepareEventClue(data, source);
@@ -1428,7 +1482,7 @@
             const data = await callDeepSeekJson(
                 deepKey,
                 '搜索证据归并',
-                '你是新闻证据归并器，只输出JSON对象。返回eventSummary、expandedSource、verifiedFacts、inferredFacts、coreEntities、candidateTerms、inferredEntities、enrichmentQueries。verifiedFacts只能写搜索样本直接支持的事实；信息不足时允许合理推断，但必须放入inferredFacts或inferredEntities。candidateTerms必须是适合组成AND管控词组的2至16字原子词，避免纯泛化词。',
+                '你是新闻管控规则证据归并器，只输出JSON对象。返回eventSummary、expandedSource、verifiedFacts、inferredFacts、coreEntities、candidateTerms、inferredEntities、locationTerms、behaviorTerms、enrichmentQueries。locationTerms和behaviorTerms每项格式为{"term":"原子词","origin":"evidence或inferred","reason":"来源"}。必须从搜索标题和正文找出输入未提及但真实存在的细粒度地点，例如公园内部河流、水体、街乡镇；同时扩展行为的同义词、口语、活动方式和风险后果。不要把“完整公园名”与三个行为塞进少量摘要组合，而要为后续“地点轴×行为轴”提供完整原子词集合。verifiedFacts只能写搜索证据直接支持的事实；合理推断必须标inferred。',
                 JSON.stringify({
                     source,
                     clue,
@@ -1439,6 +1493,8 @@
             dossier.coreEntities = [...new Set([...clue.coreEntities, ...dossier.coreEntities])];
             dossier.candidateTerms = [...new Set([...clue.candidateTerms, ...dossier.candidateTerms])];
             dossier.inferredEntities = [...new Set([...clue.inferredEntities, ...dossier.inferredEntities])];
+            dossier.locationTerms = normalizeAxisTerms([...clue.locationTerms, ...dossier.locationTerms]);
+            dossier.behaviorTerms = normalizeAxisTerms([...clue.behaviorTerms, ...dossier.behaviorTerms]);
             return dossier;
         }
 
@@ -1490,6 +1546,9 @@
                 validCandidates: 0,
                 repairedCandidates: 0,
                 fallbackCandidates: 0,
+                locationTerms: 0,
+                behaviorTerms: 0,
+                coverageCandidates: 0,
                 rejectedCandidates: [],
             };
             try {
@@ -1507,6 +1566,10 @@
                 aiPipelineState.eventDossier = dossier;
                 aiPipelineState.diagnostics.verifiedFacts = dossier.verifiedFacts.length;
                 aiPipelineState.diagnostics.inferredFacts = dossier.inferredFacts.length;
+                const coverage = buildCoverageCandidates(dossier);
+                aiPipelineState.diagnostics.locationTerms = coverage.locations.length;
+                aiPipelineState.diagnostics.behaviorTerms = coverage.behaviors.length;
+                aiPipelineState.diagnostics.coverageCandidates = coverage.candidates.length;
 
                 setPipelineStatus('4/12 正在生成事件搜索计划…');
                 const planData = await callDeepSeekJson(
@@ -1542,13 +1605,14 @@
                 aiPipelineState.samples = groups;
 
                 setPipelineStatus('9/12 正在校验并修复候选格式…');
-                const rawCandidateInputs = [
-                    ...plan.seedCandidates,
-                    ...(classifyData.candidates || []),
-                ];
+                const modelCandidateInputs = [...plan.seedCandidates, ...(classifyData.candidates || [])];
+                // 轴信息充足时以“地点×行为”覆盖组合为主，避免混入“安全隐患,市民”等摘要式弱候选。
+                const rawCandidateInputs = coverage.candidates.length >= 6
+                    ? coverage.candidates
+                    : [...coverage.candidates, ...modelCandidateInputs];
                 const rejectedCandidates = [];
                 let validCandidates = normalizeCandidateList(rawCandidateInputs, 'evidence', rejectedCandidates);
-                aiPipelineState.diagnostics.rawCandidates = rawCandidateInputs.length;
+                aiPipelineState.diagnostics.rawCandidates = modelCandidateInputs.length;
                 aiPipelineState.diagnostics.validCandidates = validCandidates.length;
                 aiPipelineState.diagnostics.rejectedCandidates = rejectedCandidates;
 
