@@ -36,11 +36,27 @@ jobs:
       - name: Prepare static site
         env:
           DOUBAO_SEARCH_API_URL: ${{ vars.DOUBAO_SEARCH_API_URL }}
+          DEEPSEEK_API_KEY: ${{ vars.DEEPSEEK_API_KEY }}
+          DOUBAO_SEARCH_API_KEY: ${{ vars.DOUBAO_SEARCH_API_KEY }}
         run: |
           mkdir -p site
           cp home.html index.html schedule.html web-tracker.html app-config.js site/
-          URL="$(printf '%s' "$DOUBAO_SEARCH_API_URL" | sed 's/^`//;s/`$//;s/^"//;s/"$//;s/^'"'"'//;s/'"'"'$//')"
-          printf 'window.DAIBAN_HOME_CONFIG = {\n    DOUBAO_SEARCH_API_URL: %s,\n};\n' "'$URL'" > site/app-config.js
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          config = {
+              "DOUBAO_SEARCH_API_URL": os.environ.get("DOUBAO_SEARCH_API_URL", ""),
+              "DEEPSEEK_API_KEY": os.environ.get("DEEPSEEK_API_KEY", ""),
+              "DOUBAO_SEARCH_API_KEY": os.environ.get("DOUBAO_SEARCH_API_KEY", ""),
+          }
+          lines = ["window.DAIBAN_HOME_CONFIG = {"]
+          for key, value in config.items():
+              lines.append(f"    {key}: {json.dumps(value, ensure_ascii=False)},")
+          lines.append("};")
+          Path("site/app-config.js").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
