@@ -1290,15 +1290,19 @@
         }
 
         async function searchWithDoubao(apiKey, query, category) {
+            const body = {
+                Query: query,
+                Count: 10,
+            };
+            // 关键词生成流程需要近一个月新闻
+            if (category === 'keyword') body.TimeRange = 'OneMonth';
             const response = await fetch(DOUBAO_SEARCH_API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-                body: JSON.stringify({
-                    Query: query,
-                    Count: 10,
-                }),
+                body: JSON.stringify(body),
             });
             const payload = await response.json().catch(() => ({}));
+            console.log(`[搜索] query="${query}"`, { status: response.status, resultCount: payload.Result?.ResultCount, webResults: (payload.Result?.WebResults || []).length });
             if (!response.ok || payload.ResponseMetadata?.Error) {
                 throw new Error(payload.ResponseMetadata?.Error?.Message || payload.error || `HTTP ${response.status}`);
             }
