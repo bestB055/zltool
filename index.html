@@ -187,6 +187,27 @@
             box-shadow: var(--soft-shadow);
         }
         .ai-candidates.show { display: block; }
+        .candidate-category-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+        .candidate-category-card {
+            overflow: hidden;
+            border: 1px solid rgba(36, 107, 254, 0.12);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.62);
+        }
+        .candidate-category-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px;
+            background: rgba(36, 107, 254, 0.08);
+        }
+        .candidate-category-title { font-weight: 900; }
         .candidate-tier {
             margin-top: 16px;
             overflow: hidden;
@@ -224,6 +245,49 @@
             display: grid;
             gap: 8px;
             padding: 12px;
+        }
+        .keyword-button-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 14px;
+        }
+        .keyword-chip {
+            min-height: 36px;
+            padding: 0 14px;
+            border-radius: 999px;
+            border: 1px solid transparent;
+            background: #fff;
+            cursor: pointer;
+            font: inherit;
+            font-size: 0.92rem;
+            font-weight: 900;
+            transition: transform 0.16s, box-shadow 0.16s, border-color 0.16s;
+        }
+        .keyword-chip:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(21, 54, 120, 0.08);
+        }
+        .keyword-chip.high {
+            color: #027a48;
+            background: #ecfdf3;
+            border-color: #abefc6;
+        }
+        .keyword-chip.medium {
+            color: #b54708;
+            background: #fffaeb;
+            border-color: #fedf89;
+        }
+        .keyword-chip.low {
+            color: #b42318;
+            background: #fef3f2;
+            border-color: #fecdca;
+        }
+        .keyword-chip.selected {
+            color: #fff;
+            background: var(--primary);
+            border-color: var(--primary);
+            box-shadow: 0 10px 22px rgba(36, 107, 254, 0.18);
         }
         .candidate-row {
             display: grid;
@@ -695,6 +759,7 @@
             .api-key-row { grid-template-columns: 1fr; }
             .candidate-row { grid-template-columns: auto 1fr; }
             .candidate-metrics { grid-column: 2; }
+            .candidate-category-grid { grid-template-columns: 1fr; }
             .generate-hint { line-height: 1.5; }
         }
     </style>
@@ -1290,15 +1355,19 @@
         }
 
         async function searchWithDoubao(apiKey, query, category) {
+            const body = {
+                Query: query,
+                Count: 10,
+            };
+            // 关键词生成流程需要近一个月新闻
+            if (category === 'keyword') body.TimeRange = 'OneMonth';
             const response = await fetch(DOUBAO_SEARCH_API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-                body: JSON.stringify({
-                    Query: query,
-                    Count: 10,
-                }),
+                body: JSON.stringify(body),
             });
             const payload = await response.json().catch(() => ({}));
+            console.log(`[搜索] query="${query}"`, { status: response.status, resultCount: payload.Result?.ResultCount, webResults: (payload.Result?.WebResults || []).length });
             if (!response.ok || payload.ResponseMetadata?.Error) {
                 throw new Error(payload.ResponseMetadata?.Error?.Message || payload.error || `HTTP ${response.status}`);
             }
@@ -1682,52 +1751,50 @@
 
         function renderKeywordTiers() {
             const tierLabels = { high: '高可用', medium: '中可用', low: '低可用' };
-            const categoryLabels = Object.fromEntries(KEYWORD_CATEGORIES);
             const container = document.getElementById('candidateTiers');
             container.innerHTML = '';
+            const grid = document.createElement('div');
+            grid.className = 'candidate-category-grid';
             KEYWORD_CATEGORIES.forEach(([category, categoryLabel]) => {
-                ['high', 'medium', 'low'].forEach(tier => {
-                    const items = aiPipelineState.candidates.filter(item => item.category === category && item.tier === tier);
-                    if (!items.length) return;
-                    const section = document.createElement('section');
-                    section.className = `candidate-tier ${tier}`;
-                    section.innerHTML = `
-                        <div class="candidate-tier-header">
-                            <span class="candidate-tier-title">${categoryLabel} · ${tierLabels[tier]}（${items.length}）</span>
-                            <span class="candidate-tier-actions">
-                                <button type="button" data-select-tier="${category}:${tier}">全选本档</button>
-                                <button type="button" data-clear-tier="${category}:${tier}">取消本档</button>
-                            </span>
-                        </div>
-                        <div class="candidate-list"></div>`;
-                    const list = section.querySelector('.candidate-list');
-                    items.forEach(item => {
-                        const row = document.createElement('label');
-                        row.className = 'candidate-row';
-                        row.innerHTML = `
-                            <input type="checkbox" class="candidate-checkbox" data-id="${item.id}" ${aiPipelineState.selectedIds.has(item.id) ? 'checked' : ''}>
-                            <span class="candidate-word"></span>
-                            <span class="candidate-metrics"></span>`;
-                        const word = row.querySelector('.candidate-word');
-                        word.textContent = item.text;
-                        const origin = document.createElement('span');
-                        origin.className = `candidate-origin ${item.origin}`;
-                        origin.textContent = item.origin === 'evidence' ? '搜索证据' : '同近义扩展';
-                        word.appendChild(origin);
-                        row.querySelector('.candidate-metrics').textContent =
-                            `${categoryLabels[item.category]}；相关性 ${item.relevance ?? '未评分'}${item.reason ? `；${item.reason}` : ''}`;
-                        list.appendChild(row);
+                const items = aiPipelineState.candidates
+                    .filter(item => item.category === category)
+                    .sort((a, b) => {
+                        const order = { high: 0, medium: 1, low: 2 };
+                        return order[a.tier] - order[b.tier] || (b.relevance ?? 0) - (a.relevance ?? 0);
                     });
-                    container.appendChild(section);
+                const section = document.createElement('section');
+                section.className = 'candidate-category-card';
+                section.innerHTML = `
+                    <div class="candidate-category-header">
+                        <span class="candidate-category-title">${categoryLabel}（${items.length}）</span>
+                        <span class="candidate-tier-actions">
+                            <button type="button" data-select-category="${category}">全选本类</button>
+                            <button type="button" data-clear-category="${category}">取消本类</button>
+                        </span>
+                    </div>
+                    <div class="keyword-button-list"></div>`;
+                const list = section.querySelector('.keyword-button-list');
+                if (!items.length) {
+                    list.innerHTML = '<div class="candidate-empty">暂无候选</div>';
+                }
+                items.forEach(item => {
+                    const chip = document.createElement('button');
+                    chip.type = 'button';
+                    chip.className = `keyword-chip ${item.tier}${aiPipelineState.selectedIds.has(item.id) ? ' selected' : ''}`;
+                    chip.dataset.id = item.id;
+                    chip.title = `${tierLabels[item.tier]}；相关性 ${item.relevance ?? '未评分'}${item.reason ? `；${item.reason}` : ''}`;
+                    chip.textContent = item.text;
+                    list.appendChild(chip);
                 });
+                grid.appendChild(section);
             });
+            container.appendChild(grid);
             document.getElementById('aiCandidates').classList.add('show');
         }
 
-        function selectKeywordTier(key, selected) {
-            const [category, tier] = key.split(':');
+        function selectKeywordCategory(category, selected) {
             aiPipelineState.candidates
-                .filter(item => item.category === category && item.tier === tier)
+                .filter(item => item.category === category)
                 .forEach(item => selected ? aiPipelineState.selectedIds.add(item.id) : aiPipelineState.selectedIds.delete(item.id));
             renderKeywordTiers();
         }
@@ -2274,10 +2341,16 @@ high表示搜索证据直接且高度相关；medium表示证据相关或常用�
                 else aiPipelineState.selectedIds.delete(checkbox.dataset.id);
             });
             document.getElementById('candidateTiers').addEventListener('click', (e) => {
-                const selectButton = e.target.closest('[data-select-tier]');
-                const clearButton = e.target.closest('[data-clear-tier]');
-                if (selectButton) selectKeywordTier(selectButton.dataset.selectTier, true);
-                if (clearButton) selectKeywordTier(clearButton.dataset.clearTier, false);
+                const chip = e.target.closest('.keyword-chip');
+                const selectButton = e.target.closest('[data-select-category]');
+                const clearButton = e.target.closest('[data-clear-category]');
+                if (chip) {
+                    if (aiPipelineState.selectedIds.has(chip.dataset.id)) aiPipelineState.selectedIds.delete(chip.dataset.id);
+                    else aiPipelineState.selectedIds.add(chip.dataset.id);
+                    renderKeywordTiers();
+                }
+                if (selectButton) selectKeywordCategory(selectButton.dataset.selectCategory, true);
+                if (clearButton) selectKeywordCategory(clearButton.dataset.clearCategory, false);
             });
             document.getElementById('addColumnBtn').addEventListener('click', addColumn);
             document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
