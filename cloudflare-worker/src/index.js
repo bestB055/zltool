@@ -1,4 +1,4 @@
-const DOUBAO_SEARCH_URL = 'https://open.feedcoopapi.com/agent_api/agent/collab';
+const DOUBAO_SEARCH_URL = 'https://open.feedcoopapi.com/search_api/web_search';
 
 export default {
     async fetch(request, env) {
@@ -34,6 +34,20 @@ export default {
             return jsonResponse({ error: 'Query is required' }, 400, corsHeaders);
         }
 
+        const body = {
+            Query: query,
+            SearchType: 'web',
+            Count: Math.min(50, Math.max(1, Number(payload.Count) || 10)),
+            Filter: {
+                NeedContent: true,
+                NeedUrl: true,
+            },
+            ContentFormats: 'text',
+        };
+
+        const timeRange = String(payload.TimeRange || '').trim();
+        if (timeRange) body.TimeRange = timeRange;
+
         try {
             const response = await fetch(DOUBAO_SEARCH_URL, {
                 method: 'POST',
@@ -41,19 +55,7 @@ export default {
                     'Content-Type': 'application/json',
                     Authorization: authorization,
                 },
-                body: JSON.stringify({
-                    Query: query,
-                    Count: Math.min(50, Math.max(1, Number(payload.Count) || 10)),
-                    Filter: {
-                        NeedContent: true,
-                        NeedUrl: true,
-                        AuthInfoLevel: 0,
-                    },
-                    QueryControl: {
-                        QueryRewrite: true,
-                    },
-                    ContentFormats: 'text',
-                }),
+                body: JSON.stringify(body),
             });
 
             const responseHeaders = new Headers(corsHeaders);
