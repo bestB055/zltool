@@ -266,6 +266,15 @@
             margin-top: 16px;
             flex-wrap: wrap;
         }
+        .candidate-target-select {
+            min-height: 42px;
+            padding: 0 12px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 14px;
+            background: #fff;
+            color: var(--text);
+            font: inherit;
+        }
         .columns-wrapper {
             display: flex;
             gap: 16px;
@@ -700,8 +709,8 @@
         <section class="ai-generator" aria-labelledby="aiGeneratorTitle">
             <div class="ai-generator-header">
                 <div>
-                    <h2 class="ai-generator-title" id="aiGeneratorTitle">AI 生成管控词组</h2>
-                    <p class="ai-generator-desc">支持输入一句话事件线索或完整新闻原文。系统会先联网补充事件样本，再生成并测试2至3词 AND 管控词组；高可用项会自动勾选，确认后才进入导出结果。</p>
+                    <h2 class="ai-generator-title" id="aiGeneratorTitle">AI 联网拆词</h2>
+                    <p class="ai-generator-desc">输入新闻标题、正文或链接。系统检索近一个月相关内容，提取事件、人物、地点和关键动作四类关键词及同近义扩展，供勾选后加入组合列或单独添加。</p>
                 </div>
             </div>
             <div class="ai-generator-grid">
@@ -721,7 +730,7 @@
                     </div>
                 </div>
                 <div class="ai-generator-actions">
-                    <button class="copy-btn ai-generate-btn" id="aiGenerateBtn" type="button">生成管控词组</button>
+                    <button class="copy-btn ai-generate-btn" id="aiGenerateBtn" type="button">联网生成关键词</button>
                     <span class="ai-generator-status" id="aiGeneratorStatus" aria-live="polite"></span>
                 </div>
             </div>
@@ -729,13 +738,15 @@
         <section class="ai-candidates" id="aiCandidates" aria-labelledby="aiCandidatesTitle">
             <div class="ai-generator-header">
                 <div>
-                    <h2 class="ai-generator-title" id="aiCandidatesTitle">AI 候选词组</h2>
-                    <p class="ai-generator-desc" id="candidateSummary">候选经过联网样本的本地 AND 测试，并由 DeepSeek 复核临界项。</p>
+                    <h2 class="ai-generator-title" id="aiCandidatesTitle">AI 关键词候选</h2>
+                    <p class="ai-generator-desc" id="candidateSummary">候选按事件、人物、地点、关键动作分类，并按证据与相关性分档。</p>
                 </div>
             </div>
             <div id="candidateTiers"></div>
             <div class="candidate-footer">
-                <button class="copy-btn" id="addSelectedCandidatesBtn" type="button">加入导出结果</button>
+                <select class="candidate-target-select" id="candidateTargetColumn" aria-label="选择组合列"></select>
+                <button class="copy-btn" id="addSelectedToColumnBtn" type="button">加入组合列</button>
+                <button class="export-excel-btn" id="addSelectedToManualBtn" type="button">单独添加</button>
                 <span class="ai-generator-status" id="candidateActionStatus" aria-live="polite"></span>
             </div>
         </section>
@@ -858,16 +869,46 @@
             },
         };
 
-        function addManualKeyword() {
-            const input = document.getElementById('manualKeywordInput');
-            const keyword = sanitizeText(input.value).trim();
-            if (!keyword) return;
-            manualKeywords.push(keyword);
-            const list = document.getElementById('manualList');
+        function splitInputTerms(value) {
+            // Preserve English commas so "词一,词二" remains one keyword.
+            return sanitizeText(value)
+                .split(/[、\s\r\n]+/)
+                .map(item => item.trim())
+                .filter(Boolean);
+        }
+
+        function appendNounItem(list, keyword, onRemove) {
             const item = document.createElement('div');
             item.className = 'noun-item';
-            item.innerHTML = `<span class="noun-text">${keyword}</span><button class="noun-remove" onclick="removeManualKeyword(this, '${keyword}')">×</button>`;
+            const text = document.createElement('span');
+            text.className = 'noun-text';
+            text.textContent = keyword;
+            const remove = document.createElement('button');
+            remove.className = 'noun-remove';
+            remove.type = 'button';
+            remove.textContent = '×';
+            remove.addEventListener('click', () => {
+                item.remove();
+                onRemove();
+                updateOutput();
+            });
+            item.append(text, remove);
             list.appendChild(item);
+        }
+
+        function addManualKeyword() {
+            const input = document.getElementById('manualKeywordInput');
+            const keywords = splitInputTerms(input.value);
+            if (!keywords.length) return;
+            const list = document.getElementById('manualList');
+            keywords.forEach(keyword => {
+                if (manualKeywords.includes(keyword)) return;
+                manualKeywords.push(keyword);
+                appendNounItem(list, keyword, () => {
+                    const index = manualKeywords.indexOf(keyword);
+                    if (index >= 0) manualKeywords.splice(index, 1);
+                });
+            });
             input.value = '';
             input.focus();
             updateOutput();
@@ -898,16 +939,49 @@
 
         function addNoun(columnIndex) {
             const input = document.getElementById(`nounInput${columnIndex}`);
-            const noun = sanitizeText(input.value).trim();
-            if (!noun) return;
+            const nouns = splitInputTerms(input.value);
+            if (!nouns.length) return;
             const list = document.getElementById(`nounList${columnIndex}`);
-            const item = document.createElement('div');
-            item.className = 'noun-item';
-            item.innerHTML = `<span class="noun-text">${noun}</span><button class="noun-remove" onclick="removeNoun(this)">×</button>`;
-            list.appendChild(item);
+            const current = new Set(Array.from(list.querySelectorAll('.noun-text')).map(item => item.textContent));
+            nouns.forEach(noun => {
+                if (current.has(noun)) return;
+                current.add(noun);
+                appendNounItem(list, noun, () => {});
+            });
             input.value = '';
             input.focus();
             updateOutput();
+        }
+
+        function addKeywordsToColumn(keywords, columnIndex) {
+            const list = document.getElementById(`nounList${columnIndex}`);
+            if (!list) return 0;
+            const current = new Set(Array.from(list.querySelectorAll('.noun-text')).map(item => item.textContent));
+            let added = 0;
+            keywords.forEach(keyword => {
+                if (current.has(keyword)) return;
+                current.add(keyword);
+                appendNounItem(list, keyword, () => {});
+                added += 1;
+            });
+            updateOutput();
+            return added;
+        }
+
+        function addKeywordsToManual(keywords) {
+            const list = document.getElementById('manualList');
+            let added = 0;
+            keywords.forEach(keyword => {
+                if (manualKeywords.includes(keyword)) return;
+                manualKeywords.push(keyword);
+                appendNounItem(list, keyword, () => {
+                    const index = manualKeywords.indexOf(keyword);
+                    if (index >= 0) manualKeywords.splice(index, 1);
+                });
+                added += 1;
+            });
+            updateOutput();
+            return added;
         }
 
         function removeNoun(btn) {
@@ -925,6 +999,7 @@
             column.innerHTML = `<div class="column-header"><span class="column-title">第 ${columnCount} 列</span><button class="column-remove" onclick="removeColumn(this)">×</button></div><div class="noun-list" id="nounList${columnCount - 1}"></div><div class="add-noun-input"><input type="text" class="noun-input" id="nounInput${columnCount - 1}" placeholder="输入名词"><button class="add-noun-btn" data-column="${columnCount - 1}">添加</button></div>`;
             wrapper.appendChild(column);
             if (columnCount >= MAX_COLUMNS) document.getElementById('addColumnBtn').disabled = true;
+            refreshCandidateTargetColumns();
         }
 
         function removeColumn(btn) {
@@ -935,8 +1010,26 @@
             columns.forEach((col, index) => {
                 col.dataset.columnIndex = index;
                 col.querySelector('.column-title').textContent = `第 ${index + 1} 列`;
+                col.querySelector('.noun-list').id = `nounList${index}`;
+                col.querySelector('.noun-input').id = `nounInput${index}`;
+                col.querySelector('.add-noun-btn').dataset.column = index;
             });
+            refreshCandidateTargetColumns();
             updateOutput();
+        }
+
+        function refreshCandidateTargetColumns() {
+            const select = document.getElementById('candidateTargetColumn');
+            if (!select) return;
+            const selected = select.value;
+            select.innerHTML = '';
+            document.querySelectorAll('.column:not(#manualColumn)').forEach((column, index) => {
+                const option = document.createElement('option');
+                option.value = column.dataset.columnIndex;
+                option.textContent = `加入第 ${index + 1} 列参与组合`;
+                select.appendChild(option);
+            });
+            if ([...select.options].some(option => option.value === selected)) select.value = selected;
         }
 
         function cartesianProduct(arrays) {
@@ -1498,6 +1591,247 @@
             return dossier;
         }
 
+        const KEYWORD_CATEGORIES = [
+            ['event', '事件'],
+            ['person', '人物'],
+            ['location', '地点'],
+            ['action', '关键动作'],
+        ];
+
+        function normalizeKeywordTerm(value) {
+            const term = sanitizeText(value).replace(/\s+/g, '').trim();
+            // This workflow delivers two-character atomic terms, including two-digit figures.
+            return term.length === 2 ? term : '';
+        }
+
+        function normalizeKeywordCandidates(data) {
+            const unique = new Map();
+            KEYWORD_CATEGORIES.forEach(([category]) => {
+                const items = Array.isArray(data?.categories?.[category]) ? data.categories[category] : [];
+                items.forEach(item => {
+                    const term = normalizeKeywordTerm(item?.term ?? item);
+                    if (!term) return;
+                    const key = normalizeMatchText(term);
+                    if (unique.has(key)) return;
+                    const relevance = Number(item?.relevance);
+                    const tier = ['high', 'medium', 'low'].includes(item?.tier)
+                        ? item.tier
+                        : (relevance >= 80 ? 'high' : (relevance >= 55 ? 'medium' : 'low'));
+                    unique.set(key, {
+                        id: `keyword-${unique.size + 1}`,
+                        text: term,
+                        term,
+                        category,
+                        tier,
+                        origin: item?.origin === 'inferred' ? 'inferred' : 'evidence',
+                        reason: sanitizeText(item?.reason || '').trim().slice(0, 80),
+                        relevance: Number.isFinite(relevance) ? Math.max(0, Math.min(100, relevance)) : null,
+                    });
+                });
+            });
+            return [...unique.values()];
+        }
+
+        async function buildKeywordSearchPlan(deepKey, source) {
+            const data = await callDeepSeekJson(
+                deepKey,
+                '检索计划生成',
+                '你是中文新闻检索规划器，只输出JSON对象。返回queries数组，提供3条不重复、适合检索近一个月新闻的简短搜索词。输入可能含新闻链接；若含链接，须提取其标题或核心事件再生成查询。第一条应最贴近原始事件，另两条补充事件主体、地点或处理进展。不得编造事实。',
+                JSON.stringify({ source }),
+            );
+            const queries = [...new Set([source, ...toStringArray(data.queries, 3)]
+                .map(normalizeQuery)
+                .filter(Boolean))].slice(0, 3);
+            if (!queries.length) throw new Error('未能生成可用的联网检索词');
+            return queries;
+        }
+
+        async function runKeywordSearch(apiKey, queries) {
+            const settled = await Promise.allSettled(queries.map(query => searchWithDoubao(apiKey, query, 'keyword')));
+            const samples = [];
+            const seen = new Set();
+            settled.forEach((result, index) => {
+                if (result.status !== 'fulfilled') {
+                    aiPipelineState.warnings.push(`检索“${queries[index]}”失败：${result.reason?.message || '未知错误'}`);
+                    return;
+                }
+                result.value.forEach(item => {
+                    const key = item.url || `${item.title}|${item.site}`;
+                    if (!key || seen.has(key) || samples.length >= 12) return;
+                    seen.add(key);
+                    samples.push(item);
+                });
+            });
+            if (!samples.length) throw new Error('联网搜索未返回可用新闻，请检查搜索 API Key 或更换更具体的标题');
+            return samples;
+        }
+
+        function renderKeywordTiers() {
+            const tierLabels = { high: '高可用', medium: '中可用', low: '低可用' };
+            const categoryLabels = Object.fromEntries(KEYWORD_CATEGORIES);
+            const container = document.getElementById('candidateTiers');
+            container.innerHTML = '';
+            KEYWORD_CATEGORIES.forEach(([category, categoryLabel]) => {
+                ['high', 'medium', 'low'].forEach(tier => {
+                    const items = aiPipelineState.candidates.filter(item => item.category === category && item.tier === tier);
+                    if (!items.length) return;
+                    const section = document.createElement('section');
+                    section.className = `candidate-tier ${tier}`;
+                    section.innerHTML = `
+                        <div class="candidate-tier-header">
+                            <span class="candidate-tier-title">${categoryLabel} · ${tierLabels[tier]}（${items.length}）</span>
+                            <span class="candidate-tier-actions">
+                                <button type="button" data-select-tier="${category}:${tier}">全选本档</button>
+                                <button type="button" data-clear-tier="${category}:${tier}">取消本档</button>
+                            </span>
+                        </div>
+                        <div class="candidate-list"></div>`;
+                    const list = section.querySelector('.candidate-list');
+                    items.forEach(item => {
+                        const row = document.createElement('label');
+                        row.className = 'candidate-row';
+                        row.innerHTML = `
+                            <input type="checkbox" class="candidate-checkbox" data-id="${item.id}" ${aiPipelineState.selectedIds.has(item.id) ? 'checked' : ''}>
+                            <span class="candidate-word"></span>
+                            <span class="candidate-metrics"></span>`;
+                        const word = row.querySelector('.candidate-word');
+                        word.textContent = item.text;
+                        const origin = document.createElement('span');
+                        origin.className = `candidate-origin ${item.origin}`;
+                        origin.textContent = item.origin === 'evidence' ? '搜索证据' : '同近义扩展';
+                        word.appendChild(origin);
+                        row.querySelector('.candidate-metrics').textContent =
+                            `${categoryLabels[item.category]}；相关性 ${item.relevance ?? '未评分'}${item.reason ? `；${item.reason}` : ''}`;
+                        list.appendChild(row);
+                    });
+                    container.appendChild(section);
+                });
+            });
+            document.getElementById('aiCandidates').classList.add('show');
+        }
+
+        function selectKeywordTier(key, selected) {
+            const [category, tier] = key.split(':');
+            aiPipelineState.candidates
+                .filter(item => item.category === category && item.tier === tier)
+                .forEach(item => selected ? aiPipelineState.selectedIds.add(item.id) : aiPipelineState.selectedIds.delete(item.id));
+            renderKeywordTiers();
+        }
+
+        function getSelectedKeywordTexts() {
+            return aiPipelineState.candidates
+                .filter(item => aiPipelineState.selectedIds.has(item.id))
+                .map(item => item.text);
+        }
+
+        function addSelectedKeywordsToColumn() {
+            const selected = getSelectedKeywordTexts();
+            if (!selected.length) {
+                document.getElementById('candidateActionStatus').textContent = '请先勾选至少一个关键词。';
+                return;
+            }
+            const columnIndex = document.getElementById('candidateTargetColumn').value;
+            const added = addKeywordsToColumn(selected, columnIndex);
+            document.getElementById('candidateActionStatus').textContent = `已向第 ${Number(columnIndex) + 1} 列加入 ${added} 个关键词，重复项已忽略。`;
+        }
+
+        function addSelectedKeywordsToManual() {
+            const selected = getSelectedKeywordTexts();
+            if (!selected.length) {
+                document.getElementById('candidateActionStatus').textContent = '请先勾选至少一个关键词。';
+                return;
+            }
+            const added = addKeywordsToManual(selected);
+            document.getElementById('candidateActionStatus').textContent = `已单独添加 ${added} 个关键词，重复项已忽略。`;
+        }
+
+        async function generateKeywordCandidates() {
+            const source = sanitizeText(document.getElementById('newsSourceInput').value).trim();
+            const deepInput = document.getElementById('deepseekApiKeyInput');
+            const doubaoInput = document.getElementById('doubaoApiKeyInput');
+            const deepKey = normalizeApiKey(deepInput.value || getStoredKey(DEEPSEEK_API_KEY_STORAGE));
+            const doubaoKey = normalizeApiKey(doubaoInput.value || getStoredKey(DOUBAO_SEARCH_API_KEY_STORAGE));
+            const button = document.getElementById('aiGenerateBtn');
+            if (!source) return setPipelineStatus('请先输入新闻标题、正文或链接。', true);
+            if (!DOUBAO_SEARCH_API_URL) return setPipelineStatus('请先配置 Cloudflare Worker 搜索代理地址。', true);
+            if (!deepKey || !doubaoKey) return setPipelineStatus('请先配置 DeepSeek API Key 和豆包搜索 API Key。', true);
+            try {
+                if (deepInput.value.trim()) saveStoredKey(DEEPSEEK_API_KEY_STORAGE, deepKey);
+                if (doubaoInput.value.trim()) saveStoredKey(DOUBAO_SEARCH_API_KEY_STORAGE, doubaoKey);
+                deepInput.value = '';
+                doubaoInput.value = '';
+            } catch {}
+
+            button.disabled = true;
+            button.textContent = '正在联网检索…';
+            aiPipelineState.warnings = [];
+            aiPipelineState.selectedIds.clear();
+            try {
+                setPipelineStatus('1/3 正在规划近一个月新闻检索…');
+                const queries = await buildKeywordSearchPlan(deepKey, source);
+                setPipelineStatus('2/3 正在联网搜索并筛选新闻来源…');
+                const samples = await runKeywordSearch(doubaoKey, queries);
+                const data = await callDeepSeekJson(
+                    deepKey,
+                    '新闻关键词提取',
+                    `你是新闻舆情关键词编辑，只输出JSON对象。基于输入和联网搜索结果，返回eventSummary、sources、categories。
+eventSummary：用20至30个汉字概括最终事实、定性结果、过程或处置。
+sources：从搜索结果中选3至5条最相关且尽量为近一个月的新闻，返回{"title":"标题","url":"链接"}；不得编造链接。
+categories必须含event、person、location、action四个数组。每项格式为{"term":"两个字","tier":"high|medium|low","origin":"evidence|inferred","relevance":0-100,"reason":"简短依据"}。
+所有term必须恰好两个汉字或两个字符，尽可能多且去重。近义词、同义词、口语词必须归入对应四类，不能另建分类。
+event：事件最终事实、定性结果、全过程涉及的核心事件名词。
+person：主体、参与者、群体、身份、组织单位、物品名称、国家或人物别称。
+location：具体省市区县乡村镇街道、场所、平台、单位、场景，以及地名别称；输入较泛时可结合证据扩展周边具体地名。
+action：关键数字金额年份数量时间、实物、政策文件、社会事件概念、动词、处置、结果和趋势。优先保留与新闻强相关的两字词。
+high表示搜索证据直接且高度相关；medium表示证据相关或常用同义扩展；low表示合理但需人工确认的扩展。`,
+                    JSON.stringify({
+                        source,
+                        searchResults: samples.map(item => ({
+                            title: item.title,
+                            url: item.url,
+                            publishTime: item.publishTime,
+                            content: item.content.slice(0, 1000),
+                        })),
+                    }),
+                );
+                const candidates = normalizeKeywordCandidates(data);
+                if (!candidates.length) throw new Error('模型未返回符合“两字关键词”规则的词条，请换用更具体的新闻标题');
+                aiPipelineState.candidates = candidates;
+                const knownUrls = new Set(samples.map(item => item.url).filter(Boolean));
+                const sourceLinks = (Array.isArray(data.sources) ? data.sources : [])
+                    .filter(item => knownUrls.has(item?.url))
+                    .slice(0, 5);
+                if (sourceLinks.length < 3) {
+                    samples.slice(0, 5).forEach(item => {
+                        if (sourceLinks.length < 5 && item.url && !sourceLinks.some(link => link.url === item.url)) {
+                            sourceLinks.push({ title: item.title, url: item.url });
+                        }
+                    });
+                }
+                const summary = sanitizeText(data.eventSummary || '').trim();
+                document.getElementById('candidateSummary').replaceChildren();
+                document.getElementById('candidateSummary').append(`${summary || '已完成关键词提取。'} 已检索 ${samples.length} 条结果，展示来源：`);
+                sourceLinks.forEach((item, index) => {
+                    const link = document.createElement('a');
+                    link.href = item.url;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    link.textContent = `${index + 1}. ${sanitizeText(item.title || '新闻链接')}`;
+                    document.getElementById('candidateSummary').append(' ', link);
+                });
+                candidates.filter(item => item.tier === 'high').forEach(item => aiPipelineState.selectedIds.add(item.id));
+                refreshCandidateTargetColumns();
+                renderKeywordTiers();
+                setPipelineStatus(`3/3 完成：生成 ${candidates.length} 个两字关键词，高可用项已自动勾选。`);
+                document.getElementById('aiCandidates').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } catch (error) {
+                setPipelineStatus(`生成失败：${error?.message || '未知错误'}`, true);
+            } finally {
+                button.disabled = false;
+                button.textContent = '联网生成关键词';
+            }
+        }
+
         async function repairCandidateSet(deepKey, dossier, plan, validCandidates, rejectedCandidates) {
             const data = await callDeepSeekJson(
                 deepKey,
@@ -1897,14 +2231,16 @@
         }
         document.addEventListener('DOMContentLoaded', () => {
             updateApiKeyStatus();
-            document.getElementById('aiGenerateBtn').addEventListener('click', generateWithDeepSeek);
+            refreshCandidateTargetColumns();
+            document.getElementById('aiGenerateBtn').addEventListener('click', generateKeywordCandidates);
             document.getElementById('clearDeepSeekApiKeyBtn').addEventListener('click', () =>
                 clearStoredKey(DEEPSEEK_API_KEY_STORAGE, 'deepseekApiKeyInput', ' DeepSeek API Key')
             );
             document.getElementById('clearDoubaoApiKeyBtn').addEventListener('click', () =>
                 clearStoredKey(DOUBAO_SEARCH_API_KEY_STORAGE, 'doubaoApiKeyInput', '豆包搜索 API Key')
             );
-            document.getElementById('addSelectedCandidatesBtn').addEventListener('click', addSelectedCandidates);
+            document.getElementById('addSelectedToColumnBtn').addEventListener('click', addSelectedKeywordsToColumn);
+            document.getElementById('addSelectedToManualBtn').addEventListener('click', addSelectedKeywordsToManual);
             document.getElementById('candidateTiers').addEventListener('change', (e) => {
                 const checkbox = e.target.closest('.candidate-checkbox');
                 if (!checkbox) return;
@@ -1914,8 +2250,8 @@
             document.getElementById('candidateTiers').addEventListener('click', (e) => {
                 const selectButton = e.target.closest('[data-select-tier]');
                 const clearButton = e.target.closest('[data-clear-tier]');
-                if (selectButton) selectCandidateTier(selectButton.dataset.selectTier, true);
-                if (clearButton) selectCandidateTier(clearButton.dataset.clearTier, false);
+                if (selectButton) selectKeywordTier(selectButton.dataset.selectTier, true);
+                if (clearButton) selectKeywordTier(clearButton.dataset.clearTier, false);
             });
             document.getElementById('addColumnBtn').addEventListener('click', addColumn);
             document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
