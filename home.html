@@ -237,6 +237,78 @@
             background: #fff;
         }
 
+        .quick-section {
+            margin-bottom: 18px;
+        }
+
+        .quick-rescan-panel {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .quick-rescan-input {
+            width: 100%;
+            min-height: 48px;
+            padding: 0 15px;
+            border: 1px solid rgba(36, 107, 254, 0.14);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.72);
+            color: var(--text);
+            font: inherit;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+        }
+
+        .quick-rescan-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(36, 107, 254, 0.1);
+            background: #fff;
+        }
+
+        .quick-rescan-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .quick-rescan-manual {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 44px;
+            padding: 0 12px;
+            border: 1px solid rgba(36, 107, 254, 0.12);
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.7);
+            color: var(--muted);
+            font-size: 0.9rem;
+            font-weight: 800;
+        }
+
+        .quick-rescan-option {
+            min-height: 44px;
+            padding: 0 16px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 14px;
+            background: #fff;
+            color: var(--primary-dark);
+            font: inherit;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s, background 0.2s;
+        }
+
+        .quick-rescan-option:hover {
+            transform: translateY(-2px);
+            border-color: rgba(36, 107, 254, 0.32);
+            box-shadow: 0 14px 30px rgba(36, 107, 254, 0.12);
+            background: #fff;
+        }
+
         .feedback-footer {
             display: flex;
             flex-direction: column;
@@ -362,6 +434,19 @@
                 align-items: flex-start;
                 flex-direction: column;
             }
+
+            .quick-rescan-panel {
+                grid-template-columns: 1fr;
+            }
+
+            .quick-rescan-actions {
+                width: 100%;
+                justify-content: stretch;
+            }
+
+            .quick-rescan-option {
+                flex: 1;
+            }
         }
     </style>
 </head>
@@ -371,6 +456,27 @@
             <h1>带班首页</h1>
             <p class="page-subtitle" id="todaySubtitle">今天是</p>
         </header>
+
+        <section class="section quick-section" id="quickEntries">
+            <div class="section-header">
+                <div>
+                    <h2 class="section-title">快捷回扫</h2>
+                    <p class="section-desc">输入 GID 或素材 ID，按当前日期范围快速打开 IMC 回扫页面。</p>
+                </div>
+            </div>
+
+            <div class="quick-rescan-panel">
+                <input class="quick-rescan-input" id="quickRescanInput" type="text" placeholder="快捷回扫：输入GID或素材值,多个素材值可用逗号/空格/分号分隔">
+                <div class="quick-rescan-actions">
+                    <label class="quick-rescan-manual">
+                        <input id="quickRescanManual" type="checkbox">
+                        人审
+                    </label>
+                    <button class="quick-rescan-option" type="button" id="quickScanGidBtn">扫GID</button>
+                    <button class="quick-rescan-option" type="button" id="quickScanMaterialBtn">扫素材</button>
+                </div>
+            </div>
+        </section>
 
         <section class="section" id="modules">
             <div class="section-header">
@@ -470,6 +576,10 @@
         const feedbackToggle = document.getElementById('feedbackToggle');
         const feedbackPanel = document.getElementById('feedbackPanel');
         const feedbackInput = document.getElementById('feedbackInput');
+        const quickRescanInput = document.getElementById('quickRescanInput');
+        const quickRescanManual = document.getElementById('quickRescanManual');
+        const quickScanGidBtn = document.getElementById('quickScanGidBtn');
+        const quickScanMaterialBtn = document.getElementById('quickScanMaterialBtn');
         let toastTimer = null;
 
         function renderToday() {
@@ -487,10 +597,70 @@
             toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
         }
 
+        function getQuickRescanDateRange() {
+            const now = new Date();
+            return {
+                startMs: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0).getTime(),
+                endMs: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0).getTime() - 1
+            };
+        }
+
+        function getQuickRescanValue() {
+            return quickRescanInput.value.trim();
+        }
+
+        function getQuickRescanParts(value) {
+            return value.split(/[，,;；\s]+/).map(item => item.trim()).filter(Boolean);
+        }
+
+        function isNumericRescanValue(value) {
+            return /^[\d，,;；\s]+$/.test(value) && /\d/.test(value);
+        }
+
+        function openQuickRescan(type) {
+            const keyword = getQuickRescanValue();
+            if (!keyword) {
+                showToast('请先输入需要回扫的 GID 或素材 ID');
+                quickRescanInput.focus();
+                return;
+            }
+
+            const { startMs, endMs } = getQuickRescanDateRange();
+            const isGid = type === 'gid';
+            const url = new URL(`https://imc.bytedance.net/tools/push-intercept/${isGid ? 'material-group' : 'material-intercept'}`);
+            url.searchParams.set('curAppId', '1128');
+            url.searchParams.set('isNewTask', '0');
+            url.searchParams.set('startCreateTime', String(startMs));
+            url.searchParams.set('endCreateTime', String(endMs));
+            url.searchParams.set('pageNum', '1');
+            if (isGid) {
+                url.searchParams.set('isSimilar', '0');
+                if (isNumericRescanValue(keyword)) {
+                    url.searchParams.set('groupIds', getQuickRescanParts(keyword).join(','));
+                } else {
+                    getQuickRescanParts(keyword).forEach(item => {
+                        url.searchParams.append('materialValueList', item);
+                    });
+                }
+            } else {
+                url.searchParams.set('materialIds', getQuickRescanParts(keyword).join(','));
+            }
+            if (quickRescanManual.checked) {
+                url.searchParams.set('genTypeList', 'manual');
+            }
+            window.open(url.toString(), '_blank');
+        }
+
         placeholders.forEach((item) => {
             item.addEventListener('click', () => {
                 showToast(`${item.dataset.feature}入口已预留，待飞书数据源完善后接入。`);
             });
+        });
+
+        quickScanGidBtn.addEventListener('click', () => openQuickRescan('gid'));
+        quickScanMaterialBtn.addEventListener('click', () => openQuickRescan('material'));
+        quickRescanInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') openQuickRescan('gid');
         });
 
         feedbackToggle.addEventListener('click', () => {
