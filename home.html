@@ -635,15 +635,13 @@
             url.searchParams.set('pageNum', '1');
             if (isGid) {
                 url.searchParams.set('isSimilar', '0');
-                if (isNumericRescanValue(keyword)) {
-                    url.searchParams.set('groupIds', getQuickRescanParts(keyword).join(','));
-                } else {
-                    getQuickRescanParts(keyword).forEach(item => {
-                        url.searchParams.append('materialValueList', item);
-                    });
-                }
+            }
+            if (isNumericRescanValue(keyword)) {
+                url.searchParams.set('groupIds', getQuickRescanParts(keyword).join(','));
             } else {
-                url.searchParams.set('materialIds', getQuickRescanParts(keyword).join(','));
+                getQuickRescanParts(keyword).forEach(item => {
+                    url.searchParams.append('materialValueList', item);
+                });
             }
             if (quickRescanManual.checked) {
                 url.searchParams.set('genTypeList', 'manual');
