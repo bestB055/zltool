@@ -1,8 +1,21 @@
+.recent-updates-widget,
+body {
+    caret-color: transparent;
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"] {
+    caret-color: auto;
+}
+
 .recent-updates-widget {
     position: fixed;
     top: 14px;
     right: 14px;
     z-index: 9999;
+    padding-bottom: 8px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -22,7 +35,7 @@
 
 .recent-updates-panel {
     position: absolute;
-    top: calc(100% + 8px);
+    top: 100%;
     right: 0;
     width: min(360px, calc(100vw - 28px));
     max-height: min(420px, calc(100vh - 70px));
