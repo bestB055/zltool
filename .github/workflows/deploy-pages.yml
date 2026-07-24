@@ -11,6 +11,9 @@ on:
       - 'schedule.html'
       - 'web-tracker.html'
       - 'app-config.js'
+      - 'recent-updates.css'
+      - 'recent-updates.js'
+      - 'recent-updates.md'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
@@ -40,7 +43,7 @@ jobs:
           DOUBAO_SEARCH_API_KEY: ${{ vars.DOUBAO_SEARCH_API_KEY }}
         run: |
           mkdir -p site
-          cp home.html index.html schedule.html web-tracker.html app-config.js site/
+          cp home.html index.html schedule.html web-tracker.html app-config.js recent-updates.css recent-updates.js recent-updates.md site/
           python - <<'PY'
           import json
           import os
