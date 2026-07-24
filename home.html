@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>带班首页</title>
+    <link rel="stylesheet" href="recent-updates.css">
+    <script src="recent-updates.js" defer></script>
     <style>
         * {
             margin: 0;
@@ -309,6 +311,13 @@
             background: #fff;
         }
 
+        .quick-link-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+
         .feedback-footer {
             display: flex;
             flex-direction: column;
@@ -460,8 +469,8 @@
         <section class="section quick-section" id="quickEntries">
             <div class="section-header">
                 <div>
-                    <h2 class="section-title">快捷回扫</h2>
-                    <p class="section-desc">输入 GID 或素材 ID，按当前日期范围快速打开 IMC 回扫页面。</p>
+                    <h2 class="section-title">快捷入口</h2>
+                    <p class="section-desc">常用回扫和配置页面集中跳转。</p>
                 </div>
             </div>
 
@@ -475,6 +484,12 @@
                     <button class="quick-rescan-option" type="button" id="quickScanGidBtn">扫GID</button>
                     <button class="quick-rescan-option" type="button" id="quickScanMaterialBtn">扫素材</button>
                 </div>
+            </div>
+
+            <div class="quick-link-group">
+                <a class="module-link-btn" href="https://bee.bytedance.net/1533/combine-imc/17275/data" target="_blank" rel="noopener noreferrer">拦截直播标题</a>
+                <a class="module-link-btn" href="https://bee.bytedance.net/1533/combine-imc/16745/data" target="_blank" rel="noopener noreferrer">拦截直播昵称</a>
+                <a class="module-link-btn" href="https://bee.bytedance.net/1533/combine-imc/17557/data" target="_blank" rel="noopener noreferrer">主播黑名单</a>
             </div>
         </section>
 
@@ -513,19 +528,6 @@
                     </div>
                     <span class="module-footer">打开配置 →</span>
                 </a>
-
-                <div class="module-card multi-link-card">
-                    <div>
-                        <span class="module-kicker available">正式可用</span>
-                        <h3 class="module-title">直播拦截配置</h3>
-                        <p class="module-desc">集中跳转到直播标题、直播昵称和主播黑名单的配置页面。</p>
-                    </div>
-                    <div class="module-link-group">
-                        <a class="module-link-btn" href="https://bee.bytedance.net/1533/combine-imc/17275/data" target="_blank" rel="noopener noreferrer">拦截直播标题</a>
-                        <a class="module-link-btn" href="https://bee.bytedance.net/1533/combine-imc/16745/data" target="_blank" rel="noopener noreferrer">拦截直播昵称</a>
-                        <a class="module-link-btn" href="https://bee.bytedance.net/1533/combine-imc/17557/data" target="_blank" rel="noopener noreferrer">主播黑名单</a>
-                    </div>
-                </div>
 
                 <!-- <button class="module-card placeholder" type="button" data-feature="带班提示生成" disabled>
                     <div>
