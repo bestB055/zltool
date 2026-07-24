@@ -479,19 +479,6 @@
             border-color: #12a150;
             color: white;
         }
-        .imc-rescan-btn {
-            background: var(--primary);
-            border-color: var(--primary);
-            color: white;
-        }
-        .imc-rescan-btn:disabled {
-            background: #d0d5dd;
-            border-color: #d0d5dd;
-            color: #fff;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
         .top-actions {
             display: flex;
             justify-content: space-between;
@@ -506,8 +493,74 @@
             flex-wrap: wrap;
         }
         .top-actions .add-column-btn,
-        .top-actions .imc-rescan-btn,
         .top-actions .feishu-sheet-btn { margin-bottom: 0; }
+        .quick-rescan-panel {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .quick-rescan-input {
+            width: 100%;
+            min-height: 48px;
+            padding: 0 15px;
+            border: 1px solid rgba(36, 107, 254, 0.14);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.72);
+            color: var(--text);
+            font: inherit;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+        }
+        .quick-rescan-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(36, 107, 254, 0.1);
+            background: #fff;
+        }
+        .quick-rescan-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        .quick-rescan-manual {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 44px;
+            padding: 0 12px;
+            border: 1px solid rgba(36, 107, 254, 0.12);
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.7);
+            color: var(--muted);
+            font-size: 0.9rem;
+            font-weight: 800;
+        }
+        .quick-rescan-option {
+            min-height: 44px;
+            padding: 0 16px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 14px;
+            background: #fff;
+            color: var(--primary-dark);
+            font: inherit;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s, background 0.2s;
+        }
+        .quick-rescan-option:hover {
+            transform: translateY(-2px);
+            border-color: rgba(36, 107, 254, 0.32);
+            box-shadow: 0 14px 30px rgba(36, 107, 254, 0.12);
+            background: #fff;
+        }
+        .quick-rescan-status {
+            color: #b42318;
+            font-size: 0.86rem;
+            font-weight: 700;
+        }
         .manual-wrapper { margin-top: 20px; }
         .output-section {
             background: var(--card);
@@ -754,6 +807,9 @@
             .top-actions-right { justify-content: stretch; }
             .top-actions-right .add-column-btn,
             .top-actions > .add-column-btn { width: 100%; }
+            .quick-rescan-panel { grid-template-columns: 1fr; }
+            .quick-rescan-actions { width: 100%; justify-content: stretch; }
+            .quick-rescan-option { flex: 1; }
             .columns-wrapper { flex-direction: column; }
             .column { min-width: 100%; }
             .add-noun-input,
@@ -808,8 +864,18 @@
             <div class="top-actions-right">
                 <button class="add-column-btn feishu-sheet-btn" id="feishuDocBtn">飞书文档登记</button>
                 <button class="add-column-btn feishu-sheet-btn" id="feishuSheetBtn">飞书表格落表</button>
-                <button class="add-column-btn imc-rescan-btn" id="imcRescanBtn">IMC-GID回扫</button>
-                <button class="add-column-btn imc-rescan-btn" id="imcSRescanBtn">IMC-素材回扫</button>
+            </div>
+        </div>
+        <div class="quick-rescan-panel">
+            <input class="quick-rescan-input" id="quickRescanInput" type="text" placeholder="快捷回扫：输入GID或素材值,多个素材值可用逗号/空格/分号分隔">
+            <div class="quick-rescan-actions">
+                <label class="quick-rescan-manual">
+                    <input id="quickRescanManual" type="checkbox">
+                    人审
+                </label>
+                <button class="quick-rescan-option" type="button" id="quickScanGidBtn">扫GID</button>
+                <button class="quick-rescan-option" type="button" id="quickScanMaterialBtn">扫素材</button>
+                <span class="quick-rescan-status" id="quickRescanStatus" aria-live="polite"></span>
             </div>
         </div>
         <div class="columns-wrapper" id="columnsWrapper">
@@ -2314,30 +2380,60 @@ high表示搜索证据直接且高度相关；medium表示证据相关或常用�
             window.open('https://bytedance.larkoffice.com/sheets/X3lzs3LKOhsJ1Bth11Cc7wXvndf', '_blank');
         }
 
-        function openImcRescan() {
+        function getQuickRescanDateRange() {
             const now = new Date();
-            const startMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0).getTime();
-            const endMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0).getTime() - 1;
-            const url = new URL('https://imc.bytedance.net/tools/push-intercept/material-group');
+            return {
+                startMs: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0).getTime(),
+                endMs: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0).getTime() - 1
+            };
+        }
+
+        function getQuickRescanParts(value) {
+            return value.split(/[，,;；\s]+/).map(item => item.trim()).filter(Boolean);
+        }
+
+        function isNumericRescanValue(value) {
+            return /^[\d，,;；\s]+$/.test(value) && /\d/.test(value);
+        }
+
+        function setQuickRescanStatus(message = '') {
+            document.getElementById('quickRescanStatus').textContent = message;
+        }
+
+        function openQuickRescan(type) {
+            const input = document.getElementById('quickRescanInput');
+            const keyword = input.value.trim();
+            if (!keyword) {
+                setQuickRescanStatus('请先输入需要回扫的 GID 或素材 ID');
+                input.focus();
+                return;
+            }
+
+            setQuickRescanStatus('');
+            const { startMs, endMs } = getQuickRescanDateRange();
+            const isGid = type === 'gid';
+            const url = new URL(`https://imc.bytedance.net/tools/push-intercept/${isGid ? 'material-group' : 'material-intercept'}`);
             url.searchParams.set('curAppId', '1128');
             url.searchParams.set('isNewTask', '0');
             url.searchParams.set('startCreateTime', String(startMs));
             url.searchParams.set('endCreateTime', String(endMs));
             url.searchParams.set('pageNum', '1');
+            if (isGid) {
+                url.searchParams.set('isSimilar', '0');
+            }
+            if (isNumericRescanValue(keyword)) {
+                url.searchParams.set('groupIds', getQuickRescanParts(keyword).join(','));
+            } else {
+                getQuickRescanParts(keyword).forEach(item => {
+                    url.searchParams.append('materialValueList', item);
+                });
+            }
+            if (document.getElementById('quickRescanManual').checked) {
+                url.searchParams.set('genTypeList', 'manual');
+            }
             window.open(url.toString(), '_blank');
         }
-        function openImcSRescan() {
-            const now = new Date();
-            const startMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0).getTime();
-            const endMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0).getTime() - 1;
-            const url = new URL('https://imc.bytedance.net/tools/push-intercept/material-intercept');
-            url.searchParams.set('curAppId', '1128');
-            url.searchParams.set('isNewTask', '0');
-            url.searchParams.set('startCreateTime', String(startMs));
-            url.searchParams.set('endCreateTime', String(endMs));
-            url.searchParams.set('pageNum', '1');
-            window.open(url.toString(), '_blank');
-        }
+
         document.addEventListener('DOMContentLoaded', () => {
             updateApiKeyStatus();
             refreshCandidateTargetColumns();
@@ -2371,8 +2467,11 @@ high表示搜索证据直接且高度相关；medium表示证据相关或常用�
             document.getElementById('copyBtn').addEventListener('click', copyResult);
             document.getElementById('feishuDocBtn').addEventListener('click', openFeishuDoc);
             document.getElementById('feishuSheetBtn').addEventListener('click', openFeishuSheet);
-            document.getElementById('imcRescanBtn').addEventListener('click', openImcRescan);
-            document.getElementById('imcSRescanBtn').addEventListener('click', openImcSRescan);
+            document.getElementById('quickScanGidBtn').addEventListener('click', () => openQuickRescan('gid'));
+            document.getElementById('quickScanMaterialBtn').addEventListener('click', () => openQuickRescan('material'));
+            document.getElementById('quickRescanInput').addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') openQuickRescan('gid');
+            });
             document.getElementById('manualAddBtn').addEventListener('click', addManualKeyword);
             document.getElementById('generateBtn').addEventListener('click', openResultModal);
             document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelectedLines);
