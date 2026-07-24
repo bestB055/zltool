@@ -1,4 +1,3 @@
-.recent-updates-widget,
 body {
     caret-color: transparent;
 }
@@ -10,38 +9,38 @@ select,
     caret-color: auto;
 }
 
-.recent-updates-widget {
+.recent-updates-button {
     position: fixed;
     top: 14px;
     right: 14px;
     z-index: 9999;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-}
-
-.recent-updates-button {
+    display: inline-flex;
+    align-items: center;
     min-height: 32px;
     padding: 0 12px;
-    border: 1px solid rgba(36, 107, 254, 0.18);
+    border: 1px solid rgba(255, 107, 107, 0.22);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.92);
-    color: #1749b6;
+    background: rgba(255, 245, 245, 0.92);
+    color: #d94a4a;
     font-size: 12px;
     font-weight: 800;
     line-height: 1;
+    text-decoration: none;
     cursor: pointer;
-    box-shadow: 0 10px 24px rgba(21, 54, 120, 0.12);
+    box-shadow: 0 10px 24px rgba(217, 74, 74, 0.12);
     transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 .recent-updates-button:hover {
     transform: translateY(-1px);
-    border-color: rgba(36, 107, 254, 0.34);
+    border-color: rgba(255, 107, 107, 0.4);
     background: #fff;
-    box-shadow: 0 14px 30px rgba(21, 54, 120, 0.16);
+    box-shadow: 0 14px 30px rgba(217, 74, 74, 0.18);
 }
 
 @media (max-width: 640px) {
-    .recent-updates-widget {
+    .recent-updates-button {
         top: 10px;
         right: 10px;
     }
