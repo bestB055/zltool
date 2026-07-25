@@ -949,11 +949,14 @@
     <script src="app-config.js"></script>
     <script>
         const MAX_COLUMNS = 5;
-        const ARK_API_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
-        const ARK_DEEPSEEK_MODEL = 'deepseek-v4-flash-260425';
+        const ARK_MODEL = 'doubao-seed-2-1-pro-260628';
         const DEEPSEEK_API_KEY_STORAGE = 'split-word-ark-api-key';
         const DEPLOYMENT_CONFIG = window.DAIBAN_HOME_CONFIG || {};
         const DOUBAO_SEARCH_API_URL = String(DEPLOYMENT_CONFIG.DOUBAO_SEARCH_API_URL || '').trim();
+        const ARK_API_URL = String(
+            DEPLOYMENT_CONFIG.ARK_API_URL
+            || DOUBAO_SEARCH_API_URL.replace(/\/doubao-search\/?$/, '/ark-messages')
+        ).trim();
         const CONFIGURED_DEEPSEEK_API_KEY = normalizeApiKey(DEPLOYMENT_CONFIG.ARK_API_KEY || DEPLOYMENT_CONFIG.DEEPSEEK_API_KEY || '');
         const CONFIGURED_DOUBAO_SEARCH_API_KEY = normalizeApiKey(DEPLOYMENT_CONFIG.DOUBAO_SEARCH_API_KEY || '');
         const DOUBAO_SEARCH_API_KEY_STORAGE = 'split-word-doubao-search-api-key';
@@ -1209,11 +1212,11 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
                     body: JSON.stringify({
-                        model: ARK_DEEPSEEK_MODEL,
+                        model: ARK_MODEL,
+                        max_tokens: 8192,
                         temperature: 0.15,
-                        response_format: { type: 'json_object' },
+                        system: systemPrompt,
                         messages: [
-                            { role: 'system', content: systemPrompt },
                             { role: 'user', content: input },
                         ],
                     }),
@@ -1222,8 +1225,11 @@
                 throw new Error(`${stage}网络请求失败`);
             }
             const payload = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(`${stage}失败：${payload.error?.message || `HTTP ${response.status}`}`);
-            return extractJson(payload.choices?.[0]?.message?.content || '', stage);
+            if (!response.ok) throw new Error(`${stage}失败：${payload.error?.message || payload.error || `HTTP ${response.status}`}`);
+            const content = Array.isArray(payload.content)
+                ? payload.content.filter(item => item?.type === 'text').map(item => item.text || '').join('')
+                : '';
+            return extractJson(content, stage);
         }
 
         function normalizeCandidate(candidate, defaultOrigin = 'evidence', rejectionLog = []) {
@@ -1919,6 +1925,7 @@
             const button = document.getElementById('aiGenerateBtn');
             if (!source) return setPipelineStatus('请先输入新闻标题、正文或链接。', true);
             if (!DOUBAO_SEARCH_API_URL) return setPipelineStatus('请先配置 Cloudflare Worker 搜索代理地址。', true);
+            if (!ARK_API_URL) return setPipelineStatus('请先配置 Cloudflare Worker 方舟模型代理地址。', true);
             if (!deepKey || !doubaoKey) return setPipelineStatus('请先在 app-config.js 或 GitHub Variables 中配置火山方舟 API Key 和豆包搜索 API Key。', true);
 
             button.disabled = true;

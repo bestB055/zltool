@@ -1,4 +1,6 @@
 const DOUBAO_SEARCH_URL = 'https://open.feedcoopapi.com/search_api/web_search';
+const ARK_MESSAGES_URL = 'https://ark.cn-beijing.volces.com/api/compatible/v1/messages';
+const ARK_MODEL = 'doubao-seed-2-1-pro-260628';
 
 export default {
     async fetch(request, env) {
@@ -9,7 +11,7 @@ export default {
         }
 
         const url = new URL(request.url);
-        if (url.pathname !== '/doubao-search') {
+        if (!['/doubao-search', '/ark-messages'].includes(url.pathname)) {
             return jsonResponse({ error: 'Not found' }, 404, corsHeaders);
         }
 
@@ -19,7 +21,7 @@ export default {
 
         const authorization = request.headers.get('Authorization') || '';
         if (!authorization.startsWith('Bearer ')) {
-            return jsonResponse({ error: 'Missing search API key' }, 401, corsHeaders);
+            return jsonResponse({ error: 'Missing API key' }, 401, corsHeaders);
         }
 
         let payload;
@@ -27,6 +29,10 @@ export default {
             payload = await request.json();
         } catch {
             return jsonResponse({ error: 'Invalid JSON body' }, 400, corsHeaders);
+        }
+
+        if (url.pathname === '/ark-messages') {
+            return proxyArkMessages(payload, authorization.slice(7), corsHeaders);
         }
 
         const query = String(payload.Query || '').trim().slice(0, 100);
@@ -74,6 +80,49 @@ export default {
         }
     },
 };
+
+async function proxyArkMessages(payload, apiKey, corsHeaders) {
+    const system = String(payload.system || '').trim();
+    const messages = Array.isArray(payload.messages)
+        ? payload.messages.filter(item => ['user', 'assistant'].includes(item?.role))
+        : [];
+    if (!system || !messages.length) {
+        return jsonResponse({ error: 'System prompt and messages are required' }, 400, corsHeaders);
+    }
+
+    try {
+        const response = await fetch(ARK_MESSAGES_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${apiKey}`,
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+            },
+            body: JSON.stringify({
+                model: ARK_MODEL,
+                max_tokens: Math.min(8192, Math.max(1, Number(payload.max_tokens) || 8192)),
+                temperature: Number.isFinite(Number(payload.temperature)) ? Number(payload.temperature) : 0.15,
+                system,
+                messages,
+            }),
+        });
+
+        const responseHeaders = new Headers(corsHeaders);
+        responseHeaders.set(
+            'Content-Type',
+            response.headers.get('Content-Type') || 'application/json; charset=utf-8',
+        );
+        responseHeaders.set('Cache-Control', 'no-store');
+
+        return new Response(await response.text(), {
+            status: response.status,
+            headers: responseHeaders,
+        });
+    } catch {
+        return jsonResponse({ error: 'Ark model request failed' }, 502, corsHeaders);
+    }
+}
 
 function buildCorsHeaders(request, env) {
     const allowedOrigin = String(env.ALLOWED_ORIGIN || '').trim();
