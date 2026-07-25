@@ -1,5 +1,5 @@
 const DOUBAO_SEARCH_URL = 'https://open.feedcoopapi.com/search_api/web_search';
-const ARK_MESSAGES_URL = 'https://ark.cn-beijing.volces.com/api/compatible/v1/messages';
+const ARK_MESSAGES_URL = 'https://ark.cn-beijing.volces.com/api/plan/v1/messages';
 const ARK_MODEL = 'doubao-seed-2-1-pro-260628';
 
 export default {
