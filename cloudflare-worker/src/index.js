@@ -1,5 +1,5 @@
 const DOUBAO_SEARCH_URL = 'https://open.feedcoopapi.com/search_api/web_search';
-const ARK_MESSAGES_URL = 'https://ark.cn-beijing.volces.com/api/plan/v1/messages';
+const ARK_CHAT_COMPLETIONS_URL = 'https://ark.cn-beijing.volces.com/api/plan/v3/chat/completions';
 const ARK_MODEL = 'doubao-seed-evolving';
 
 export default {
@@ -19,11 +19,6 @@ export default {
             return jsonResponse({ error: 'Method not allowed' }, 405, corsHeaders);
         }
 
-        const authorization = request.headers.get('Authorization') || '';
-        if (!authorization.startsWith('Bearer ')) {
-            return jsonResponse({ error: 'Missing API key' }, 401, corsHeaders);
-        }
-
         let payload;
         try {
             payload = await request.json();
@@ -32,9 +27,13 @@ export default {
         }
 
         if (url.pathname === '/ark-messages') {
-            return proxyArkMessages(payload, authorization.slice(7), corsHeaders);
+            return proxyArkChatCompletions(payload, env, corsHeaders);
         }
 
+        const authorization = request.headers.get('Authorization') || '';
+        if (!authorization.startsWith('Bearer ')) {
+            return jsonResponse({ error: 'Missing search API key' }, 401, corsHeaders);
+        }
         const query = String(payload.Query || '').trim().slice(0, 100);
         if (!query) {
             return jsonResponse({ error: 'Query is required' }, 400, corsHeaders);
@@ -81,7 +80,11 @@ export default {
     },
 };
 
-async function proxyArkMessages(payload, apiKey, corsHeaders) {
+async function proxyArkChatCompletions(payload, env, corsHeaders) {
+    const apiKey = String(env.ARK_API_KEY || '').trim();
+    if (!apiKey) {
+        return jsonResponse({ error: 'Cloudflare Worker secret ARK_API_KEY is not configured' }, 500, corsHeaders);
+    }
     const system = String(payload.system || '').trim();
     const messages = Array.isArray(payload.messages)
         ? payload.messages.filter(item => ['user', 'assistant'].includes(item?.role))
@@ -91,19 +94,21 @@ async function proxyArkMessages(payload, apiKey, corsHeaders) {
     }
 
     try {
-        const response = await fetch(ARK_MESSAGES_URL, {
+        const response = await fetch(ARK_CHAT_COMPLETIONS_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${apiKey}`,
-                'anthropic-version': '2023-06-01',
             },
             body: JSON.stringify({
                 model: ARK_MODEL,
                 max_tokens: Math.min(8192, Math.max(1, Number(payload.max_tokens) || 8192)),
                 temperature: Number.isFinite(Number(payload.temperature)) ? Number(payload.temperature) : 0.15,
-                system,
-                messages,
+                response_format: { type: 'json_object' },
+                messages: [
+                    { role: 'system', content: system },
+                    ...messages,
+                ],
             }),
         });
 
