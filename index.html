@@ -949,15 +949,11 @@
     <script src="app-config.js"></script>
     <script>
         const MAX_COLUMNS = 5;
-        const ARK_MODEL = 'doubao-seed-evolving';
-        const DEEPSEEK_API_KEY_STORAGE = 'split-word-ark-api-key';
+        const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
+        const DEEPSEEK_API_KEY_STORAGE = 'split-word-deepseek-api-key';
         const DEPLOYMENT_CONFIG = window.DAIBAN_HOME_CONFIG || {};
         const DOUBAO_SEARCH_API_URL = String(DEPLOYMENT_CONFIG.DOUBAO_SEARCH_API_URL || '').trim();
-        const ARK_API_URL = String(
-            DEPLOYMENT_CONFIG.ARK_API_URL
-            || DOUBAO_SEARCH_API_URL.replace(/\/doubao-search\/?$/, '/ark-messages')
-        ).trim();
-        const CONFIGURED_ARK_API_KEY = normalizeApiKey(DEPLOYMENT_CONFIG.ARK_API_KEY || '');
+        const CONFIGURED_DEEPSEEK_API_KEY = normalizeApiKey(DEPLOYMENT_CONFIG.DEEPSEEK_API_KEY || '');
         const CONFIGURED_DOUBAO_SEARCH_API_KEY = normalizeApiKey(DEPLOYMENT_CONFIG.DOUBAO_SEARCH_API_KEY || '');
         const DOUBAO_SEARCH_API_KEY_STORAGE = 'split-word-doubao-search-api-key';
         let columnCount = 2;
@@ -1186,11 +1182,11 @@
 
         function updateApiKeyStatus(message = '', isError = false) {
             const status = document.getElementById('aiGeneratorStatus');
-            const arkReady = Boolean(CONFIGURED_ARK_API_KEY);
+            const deepSeekReady = Boolean(CONFIGURED_DEEPSEEK_API_KEY);
             const doubaoReady = Boolean(CONFIGURED_DOUBAO_SEARCH_API_KEY);
-            status.textContent = message || `环境配置：火山方舟 Key ${arkReady ? '已配置' : '未配置'}；豆包搜索 Key ${doubaoReady ? '已配置' : '未配置'}。`;
+            status.textContent = message || `环境配置：DeepSeek Key ${deepSeekReady ? '已配置' : '未配置'}；豆包搜索 Key ${doubaoReady ? '已配置' : '未配置'}。`;
             status.classList.toggle('error', isError);
-            status.classList.toggle('api-key-saved', !isError && arkReady && doubaoReady);
+            status.classList.toggle('api-key-saved', !isError && deepSeekReady && doubaoReady);
         }
 
         function extractJson(content, stage = 'DeepSeek') {
@@ -1208,15 +1204,15 @@
         async function callDeepSeekJson(apiKey, stage, systemPrompt, input) {
             let response;
             try {
-                response = await fetch(ARK_API_URL, {
+                response = await fetch(DEEPSEEK_API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
                     body: JSON.stringify({
-                        model: ARK_MODEL,
-                        max_tokens: 8192,
+                        model: 'deepseek-v4-flash',
                         temperature: 0.15,
-                        system: systemPrompt,
+                        response_format: { type: 'json_object' },
                         messages: [
+                            { role: 'system', content: systemPrompt },
                             { role: 'user', content: input },
                         ],
                     }),
@@ -1225,9 +1221,8 @@
                 throw new Error(`${stage}网络请求失败`);
             }
             const payload = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(`${stage}失败：${payload.error?.message || payload.error || `HTTP ${response.status}`}`);
-            const content = payload.choices?.[0]?.message?.content || '';
-            return extractJson(content, stage);
+            if (!response.ok) throw new Error(`${stage}失败：${payload.error?.message || `HTTP ${response.status}`}`);
+            return extractJson(payload.choices?.[0]?.message?.content || '', stage);
         }
 
         function normalizeCandidate(candidate, defaultOrigin = 'evidence', rejectionLog = []) {
@@ -1918,13 +1913,12 @@
 
         async function generateKeywordCandidates() {
             const source = sanitizeText(document.getElementById('newsSourceInput').value).trim();
-            const arkKey = CONFIGURED_ARK_API_KEY;
+            const deepKey = CONFIGURED_DEEPSEEK_API_KEY;
             const doubaoKey = CONFIGURED_DOUBAO_SEARCH_API_KEY;
             const button = document.getElementById('aiGenerateBtn');
             if (!source) return setPipelineStatus('请先输入新闻标题、正文或链接。', true);
             if (!DOUBAO_SEARCH_API_URL) return setPipelineStatus('请先配置 Cloudflare Worker 搜索代理地址。', true);
-            if (!ARK_API_URL) return setPipelineStatus('请先配置 Cloudflare Worker 方舟模型代理地址。', true);
-            if (!arkKey || !doubaoKey) return setPipelineStatus('请先在 GitHub Variables 中配置 ARK_API_KEY 和 DOUBAO_SEARCH_API_KEY。', true);
+            if (!deepKey || !doubaoKey) return setPipelineStatus('请先在 app-config.js 或 GitHub Variables 中配置 DeepSeek API Key 和豆包搜索 API Key。', true);
 
             button.disabled = true;
             button.textContent = '正在联网检索…';
@@ -1932,13 +1926,13 @@
             aiPipelineState.selectedIds.clear();
             try {
                 setPipelineStatus('1/3 正在规划近一个月新闻检索…');
-                const queries = await buildKeywordSearchPlan(arkKey, source);
+                const queries = await buildKeywordSearchPlan(deepKey, source);
                 setPipelineStatus('2/3 正在联网搜索并筛选新闻来源…');
                 const samples = await runKeywordSearch(doubaoKey, queries);
                 console.group('[AI 步骤 3/3] 关键词提取');
                 console.log('搜索样本数', samples.length);
                 const data = await callDeepSeekJson(
-                    arkKey,
+                    deepKey,
                     '新闻关键词提取',
                     `你是新闻舆情关键词编辑，只输出JSON对象。基于输入和联网搜索结果，返回eventSummary、sources、categories。
 eventSummary：用20至30个汉字概括最终事实、定性结果、过程或处置。
@@ -1963,7 +1957,7 @@ high表示搜索证据直接且高度相关；medium表示证据相关或常用�
                 const candidates = normalizeKeywordCandidates(data);
                 if (!candidates.length) throw new Error('模型未返回合法关键词，请换用更具体的新闻标题');
                 aiPipelineState.candidates = candidates;
-            console.log('火山方舟返回 categories', {
+                console.log('DeepSeek 返回 categories', {
                     event: (data.categories?.event || []).length,
                     person: (data.categories?.person || []).length,
                     location: (data.categories?.location || []).length,
@@ -2033,7 +2027,7 @@ high表示搜索证据直接且高度相关；medium表示证据相关或常用�
             const button = document.getElementById('aiGenerateBtn');
             if (!source) return setPipelineStatus('请先输入一句话事件线索或新闻原文。', true), document.getElementById('newsSourceInput').focus();
             if (!DOUBAO_SEARCH_API_URL) return setPipelineStatus('请先配置 Cloudflare Worker 搜索代理地址。', true);
-            if (!deepKey) return setPipelineStatus('请输入火山方舟 API Key。', true), deepInput.focus();
+            if (!deepKey) return setPipelineStatus('请输入 DeepSeek API Key。', true), deepInput.focus();
             if (!doubaoKey) return setPipelineStatus('请输入具有联网问答权限的火山引擎访问控制 API Key。', true), doubaoInput.focus();
             try {
                 if (deepInput.value.trim()) saveStoredKey(DEEPSEEK_API_KEY_STORAGE, deepKey);
@@ -2158,7 +2152,7 @@ high表示搜索证据直接且高度相关；medium表示证据相关或常用�
                     || (item.recall >= 0.75 && (item.falsePositiveRate || 0) > 0.05)
                 ).slice(0, 20);
                 if (boundary.length) {
-                    setPipelineStatus('11/12 正在让火山方舟模型复核临界候选…');
+                    setPipelineStatus('11/12 正在让 DeepSeek 复核临界候选…');
                     try {
                         const reviewData = await callDeepSeekJson(
                             deepKey,

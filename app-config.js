@@ -1,6 +1,5 @@
 window.DAIBAN_HOME_CONFIG = {
     DOUBAO_SEARCH_API_URL: '',
-    ARK_API_URL: '',
-    ARK_API_KEY: '',
+    DEEPSEEK_API_KEY: '',
     DOUBAO_SEARCH_API_KEY: '',
 };

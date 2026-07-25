@@ -38,10 +38,9 @@ jobs:
 
       - name: Prepare static site
         env:
-          ARK_API_KEY: ${{ vars.ARK_API_KEY }}
-          ARK_API_URL: ${{ vars.ARK_API_URL }}
-          DOUBAO_SEARCH_API_KEY: ${{ vars.DOUBAO_SEARCH_API_KEY }}
           DOUBAO_SEARCH_API_URL: ${{ vars.DOUBAO_SEARCH_API_URL }}
+          DEEPSEEK_API_KEY: ${{ vars.DEEPSEEK_API_KEY }}
+          DOUBAO_SEARCH_API_KEY: ${{ vars.DOUBAO_SEARCH_API_KEY }}
         run: |
           mkdir -p site
           cp home.html index.html schedule.html web-tracker.html app-config.js recent-updates.css recent-updates.js recent-updates.md site/
@@ -51,10 +50,9 @@ jobs:
           from pathlib import Path
 
           config = {
-              "ARK_API_KEY": os.environ.get("ARK_API_KEY", ""),
-              "ARK_API_URL": os.environ.get("ARK_API_URL", ""),
-              "DOUBAO_SEARCH_API_KEY": os.environ.get("DOUBAO_SEARCH_API_KEY", ""),
               "DOUBAO_SEARCH_API_URL": os.environ.get("DOUBAO_SEARCH_API_URL", ""),
+              "DEEPSEEK_API_KEY": os.environ.get("DEEPSEEK_API_KEY", ""),
+              "DOUBAO_SEARCH_API_KEY": os.environ.get("DOUBAO_SEARCH_API_KEY", ""),
           }
           lines = ["window.DAIBAN_HOME_CONFIG = {"]
           for key, value in config.items():
