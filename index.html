@@ -824,11 +824,24 @@
 </head>
 <body>
     <button class="recent-updates-button" type="button" title="查看最近更新说明">最近更新</button>
+
     <div class="container">
         <div class="tool-header">
             <a class="home-link" href="home.html">← 返回带班首页</a>
             <h1>拆词加词助手</h1>
             <p class="tool-subtitle">用于快速组合拆词、单独补充词组，并在导出前集中确认和调整结果。</p>
+        </div>
+        <div class="quick-rescan-panel">
+            <input class="quick-rescan-input" id="quickRescanInput" type="text" placeholder="快捷回扫：输入GID或素材值,多个素材值可用逗号/空格/分号分隔">
+            <div class="quick-rescan-actions">
+                <label class="quick-rescan-manual">
+                    <input id="quickRescanManual" type="checkbox">
+                    人审
+                </label>
+                <button class="quick-rescan-option" type="button" id="quickScanGidBtn">扫GID</button>
+                <button class="quick-rescan-option" type="button" id="quickScanMaterialBtn">扫素材</button>
+                <span class="quick-rescan-status" id="quickRescanStatus" aria-live="polite"></span>
+            </div>
         </div>
         <section class="ai-generator" aria-labelledby="aiGeneratorTitle">
             <div class="ai-generator-header">
@@ -859,25 +872,8 @@
         </section>
         <div class="top-actions">
             <button class="add-column-btn" id="addColumnBtn">点击新增一列</button>
-
-
-            <div class="top-actions-right">
-                <button class="add-column-btn feishu-sheet-btn" id="feishuDocBtn">飞书文档登记</button>
-                <button class="add-column-btn feishu-sheet-btn" id="feishuSheetBtn">飞书表格落表</button>
-            </div>
         </div>
-        <div class="quick-rescan-panel">
-            <input class="quick-rescan-input" id="quickRescanInput" type="text" placeholder="快捷回扫：输入GID或素材值,多个素材值可用逗号/空格/分号分隔">
-            <div class="quick-rescan-actions">
-                <label class="quick-rescan-manual">
-                    <input id="quickRescanManual" type="checkbox">
-                    人审
-                </label>
-                <button class="quick-rescan-option" type="button" id="quickScanGidBtn">扫GID</button>
-                <button class="quick-rescan-option" type="button" id="quickScanMaterialBtn">扫素材</button>
-                <span class="quick-rescan-status" id="quickRescanStatus" aria-live="polite"></span>
-            </div>
-        </div>
+        
         <div class="columns-wrapper" id="columnsWrapper">
             <div class="column" data-column-index="0">
                 <div class="column-header">
@@ -921,6 +917,10 @@
                 <div class="generate-hover">
                     <button class="copy-btn generate-btn" id="generateBtn">编辑并导出结果</button>
                     <span class="generate-hint">（进入确认页面，导出前可对以上结果进行调整删改）</span>
+                                        <div class="top-actions-right">
+                        <button class="add-column-btn feishu-sheet-btn" id="feishuDocBtn">飞书文档登记</button>
+                        <button class="add-column-btn feishu-sheet-btn" id="feishuSheetBtn">飞书表格落表</button>
+                    </div>
                 </div>
             </div>
         </div>
