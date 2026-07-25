@@ -4,5 +4,3 @@ compatibility_date = "2026-07-19"
 
 [vars]
 ALLOWED_ORIGIN = ""
-
-# Set ARK_API_KEY with `wrangler secret put ARK_API_KEY`; do not add it here.

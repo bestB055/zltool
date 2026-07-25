@@ -26,14 +26,15 @@ export default {
             return jsonResponse({ error: 'Invalid JSON body' }, 400, corsHeaders);
         }
 
-        if (url.pathname === '/ark-messages') {
-            return proxyArkChatCompletions(payload, env, corsHeaders);
-        }
-
         const authorization = request.headers.get('Authorization') || '';
         if (!authorization.startsWith('Bearer ')) {
-            return jsonResponse({ error: 'Missing search API key' }, 401, corsHeaders);
+            return jsonResponse({ error: 'Missing API key' }, 401, corsHeaders);
         }
+
+        if (url.pathname === '/ark-messages') {
+            return proxyArkChatCompletions(payload, authorization.slice(7), corsHeaders);
+        }
+
         const query = String(payload.Query || '').trim().slice(0, 100);
         if (!query) {
             return jsonResponse({ error: 'Query is required' }, 400, corsHeaders);
@@ -80,11 +81,7 @@ export default {
     },
 };
 
-async function proxyArkChatCompletions(payload, env, corsHeaders) {
-    const apiKey = String(env.ARK_API_KEY || '').trim();
-    if (!apiKey) {
-        return jsonResponse({ error: 'Cloudflare Worker secret ARK_API_KEY is not configured' }, 500, corsHeaders);
-    }
+async function proxyArkChatCompletions(payload, apiKey, corsHeaders) {
     const system = String(payload.system || '').trim();
     const messages = Array.isArray(payload.messages)
         ? payload.messages.filter(item => ['user', 'assistant'].includes(item?.role))
