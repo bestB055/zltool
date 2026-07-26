@@ -1173,7 +1173,7 @@
         const DEPLOYMENT_CONFIG = window.DAIBAN_HOME_CONFIG || {};
         const CONFIGURED_DEEPSEEK_API_KEY = normalizeApiKey(DEPLOYMENT_CONFIG.DEEPSEEK_API_KEY || '');
         const AI_SOLUTION_COUNT = 3;
-        const SCHEDULE_RULES_URL = '排班提示.txt?v=20260726-1';
+        const SCHEDULE_RULES_URL = '排班提示.txt?v=20260727-1';
 
         const state = {
             viewMode: 'shift',
@@ -2068,11 +2068,11 @@
             };
         }
 
-        function buildAiScheduleInput(localSolutions) {
+        function buildAiScheduleInput(localSolutions, acceptedSolutions = [], repair = null) {
             return {
                 schemaVersion: '1.1.0',
                 task: 'generate_schedule_candidates',
-                requestedSolutionCount: AI_SOLUTION_COUNT,
+                requestedSolutionCount: 1,
                 period: {
                     dates: dates.map((date) => ({
                         key: date.key,
@@ -2099,6 +2099,14 @@
                     assignments: solution.assignments,
                     softViolations: solution.softViolations,
                 })),
+                acceptedSolutions: acceptedSolutions.map((solution) => ({
+                    name: solution.name,
+                    assignments: solution.assignments,
+                })),
+                repair: repair ? {
+                    violations: repair.violations,
+                    assignments: repair.assignments,
+                } : null,
                 outputSchema: {
                     solutions: [{
                         name: '方案名称',
@@ -2121,44 +2129,74 @@
                 throw new Error('未配置 DeepSeek API Key，本次仅生成本地方案');
             }
             const rewardRules = await loadScheduleRewardRules();
-            const systemPrompt = [
-                '你是排班优化专家。请根据输入 JSON 生成合法、完整且有差异的排班候选。',
+            const baseSystemPrompt = [
+                '你是排班优化专家。请根据输入 JSON 生成一个合法且完整的排班候选。',
                 '必须严格遵守奖励规则中的全部硬性规则，并优化奖励分。',
                 '必须返回 JSON 对象，根字段必须为 solutions，不要返回 Markdown 或解释文字。',
                 '每个日期必须包含 morning、normal、night 三个数组，只能使用输入中的人员 ID。',
+                '如果输入中有 repair，必须逐条修复其中的 violations，不得原样返回。',
+                '如果输入中有 acceptedSolutions，新方案应在满足硬约束的前提下与已有方案有所不同。',
                 '',
                 rewardRules,
             ].join('\n');
-            const input = JSON.stringify(buildAiScheduleInput(localSolutions));
-            const result = await callDeepSeekJson(apiKey, systemPrompt, input);
-            const rawSolutions = Array.isArray(result.solutions) ? result.solutions.slice(0, AI_SOLUTION_COUNT) : [];
             const validPeople = new Set(state.people.map((person) => person.id));
             const validDates = dates.map((date) => date.key);
             const accepted = [];
+            const validDuplicates = [];
             let rejected = 0;
+            let repair = null;
+            const maximumAttempts = localSolutions.length ? 9 : 15;
 
-            rawSolutions.forEach((solution, index) => {
-                const assignments = sanitizeAssignments(solution?.assignments, validPeople, validDates);
-                if (!validateHardConstraints(assignments)) {
+            for (let attempt = 0; attempt < maximumAttempts && accepted.length < AI_SOLUTION_COUNT; attempt += 1) {
+                const input = JSON.stringify(buildAiScheduleInput(localSolutions, accepted, repair));
+                const result = await callDeepSeekJson(apiKey, baseSystemPrompt, input);
+                const solution = Array.isArray(result.solutions) ? result.solutions[0] : null;
+                if (!solution?.assignments) {
+                    repair = {
+                        assignments: {},
+                        violations: ['返回结果缺少完整 assignments，请为输入中的每个日期生成三个班次数组'],
+                    };
                     rejected += 1;
-                    return;
+                    continue;
+                }
+                const assignments = sanitizeAssignments(solution?.assignments, validPeople, validDates);
+                const violations = getHardConstraintViolations(assignments);
+                if (violations.length) {
+                    repair = { assignments, violations: violations.slice(0, 40) };
+                    rejected += 1;
+                    continue;
                 }
                 const signature = getSolutionSignature(assignments);
-                if (
-                    localSolutions.some((item) => getSolutionSignature(item.assignments) === signature)
-                    || accepted.some((item) => getSolutionSignature(item.assignments) === signature)
-                ) {
-                    rejected += 1;
-                    return;
-                }
-                accepted.push(createSolutionRecord(assignments, {
+                const record = createSolutionRecord(assignments, {
                     source: 'ai',
-                    name: solution?.name || `AI 方案 ${index + 1}`,
+                    name: solution?.name || `AI 方案 ${accepted.length + 1}`,
                     summary: solution?.summary || '由 AI 根据奖励规则生成并通过本地硬约束校验。',
-                }));
-            });
+                });
+                if (accepted.some((item) => getSolutionSignature(item.assignments) === signature)) {
+                    rejected += 1;
+                    repair = {
+                        assignments,
+                        violations: ['方案与已接纳的 AI 方案完全相同，请在保持全部硬约束的前提下调整排班'],
+                    };
+                    continue;
+                }
+                if (localSolutions.some((item) => getSolutionSignature(item.assignments) === signature)) {
+                    validDuplicates.push(record);
+                    repair = {
+                        assignments,
+                        violations: ['方案与本地基准方案完全相同，请保持硬约束并生成不同排法'],
+                    };
+                    rejected += 1;
+                    continue;
+                }
+                accepted.push(record);
+                repair = null;
+            }
 
-            return { accepted, rejected, returned: rawSolutions.length };
+            if (!accepted.length && validDuplicates.length) {
+                accepted.push(validDuplicates[0]);
+            }
+            return { accepted, rejected };
         }
 
         async function solveSchedules() {
@@ -2168,8 +2206,31 @@
             solveBtn.textContent = '正在排班...';
             setAiSolveStatus('正在生成本地候选方案...');
 
+            if (preflight.blocking.length) {
+                state.solutions = [];
+                state.activeSolutionIndex = -1;
+                setAiSolveStatus(`无可行解：${preflight.blocking.slice(0, 3).join('；')}`, true);
+                showToast(formatScheduleConflictReport(preflight));
+                solveBtn.disabled = false;
+                solveBtn.textContent = '自动排班';
+                renderAll();
+                return;
+            }
+
             const results = [];
-            for (let seed = 0; seed < 30 && results.length < 10; seed += 1) {
+            const currentAssignments = sanitizeAssignments(
+                state.assignments,
+                new Set(state.people.map((person) => person.id)),
+                dates.map((date) => date.key),
+            );
+            if (countAssignedSlots(currentAssignments) && validateHardConstraints(currentAssignments)) {
+                results.push(createSolutionRecord(currentAssignments, {
+                    source: 'local',
+                    name: '当前合法方案',
+                    summary: '排班前页面中已有的合法方案，作为本次求解保底。',
+                }));
+            }
+            for (let seed = 0; seed < 80 && results.length < 5; seed += 1) {
                 const attempt = buildSchedule(seed);
                 if (attempt) {
                     attempt.source = 'local';
@@ -2209,14 +2270,27 @@
                     state.assignments = cloneAssignments(state.solutions[0].assignments);
                     state.activeSolutionIndex = 0;
                 }
-                setAiSolveStatus(
-                    `已生成 ${results.length} 个本地方案；AI 返回 ${aiResult.returned} 个，通过校验 ${aiResult.accepted.length} 个${aiResult.rejected ? `，淘汰 ${aiResult.rejected} 个` : ''}。`,
-                );
-                showToast(`排班完成，共 ${state.solutions.length} 个候选方案`);
+                if (state.solutions.length) {
+                    setAiSolveStatus(aiResult.accepted.length
+                        ? `排班完成：已获得 ${state.solutions.length} 个满足硬约束的候选，其中 ${aiResult.accepted.length} 个为 AI 优化方案。`
+                        : `排班完成：已保留全部满足硬约束的候选，AI 未产生不同的新方案。`);
+                    showToast(`排班完成，共 ${state.solutions.length} 个候选方案`);
+                } else {
+                    const fallback = state.diagnostics.lastSolve || { blocking: [], warnings: [] };
+                    fallback.warnings = [
+                        ...(fallback.warnings || []),
+                        '预检未发现直接冲突，但本地搜索与 AI 多轮修复均未构造出完整方案。',
+                    ];
+                    state.diagnostics.lastSolve = fallback;
+                    setAiSolveStatus('排班仍在约束边界上未完成，请检查候选诊断后再次求解。', true);
+                    showToast('本次未形成可应用方案，原有排班未被覆盖');
+                }
             } catch (error) {
-                setAiSolveStatus(error.message, true);
                 if (results.length) {
+                    setAiSolveStatus(`已保留满足硬约束的本地方案；${error.message}`, true);
                     showToast(`本地方案已生成；${error.message}`);
+                } else {
+                    setAiSolveStatus(error.message, true);
                 }
             } finally {
                 solveBtn.disabled = false;
@@ -2279,10 +2353,9 @@
                     blocking.push(`${person.name} 固定上班 ${fixedDays} 天，超过满勤允许的最多 ${targets.maximumWorkDays} 个工作日`);
                 }
 
-                const availableWorkDays = dates.filter((date) => {
-                    const rule = getRule(person.id, date.key);
-                    return !rule.vacation && !rule.block.has('all');
-                }).length;
+                const availableWorkDays = dates.filter((date) =>
+                    shifts.some((shift) => canUseShiftByRule(person.id, date.key, shift.id))
+                ).length;
                 if (availableWorkDays + targets.paidLeaveDays < targets.minimumAttendanceDays) {
                     blocking.push(`${person.name} 可排班与带薪休假合计不足满勤 ${targets.minimumAttendanceDays} 天`);
                 }
@@ -2322,7 +2395,7 @@
                     if (hasLockedWork(person.id, date.key)) {
                         consecutive += 1;
                         if (consecutive > schedulePolicy.maximumConsecutiveDays) {
-                            warnings.push(`${person.name} 固定班次已形成连续超过 ${schedulePolicy.maximumConsecutiveDays} 天`);
+                            blocking.push(`${person.name} 固定班次已形成连续超过 ${schedulePolicy.maximumConsecutiveDays} 天`);
                         }
                     } else {
                         consecutive = 0;
@@ -2397,7 +2470,7 @@
                 return null;
             }
 
-            const search = fillScheduleDates(assignments, 0, seed, { nodes: 0, maxNodes: 240 });
+            const search = fillScheduleDates(assignments, 0, seed, { nodes: 0, maxNodes: 800 });
             if (!search.success) {
                 return null;
             }
@@ -2615,16 +2688,16 @@
             return validateHardConstraints(assignments);
         }
 
-        function validateHardConstraints(assignments) {
-            return state.people.every((person) => {
+        function getHardConstraintViolations(assignments) {
+            const violations = [];
+            state.people.forEach((person) => {
                 const workDays = getWorkDays(assignments, person.id);
                 const targets = getPersonWorkloadTargets(person.id);
                 const attendanceDays = workDays + targets.paidLeaveDays;
-                if (
-                    attendanceDays < targets.minimumAttendanceDays
-                    || attendanceDays > targets.maximumAttendanceDays
-                ) {
-                    return false;
+                if (attendanceDays < targets.minimumAttendanceDays) {
+                    violations.push(`${person.name} 满勤不足 ${targets.minimumAttendanceDays - attendanceDays} 天`);
+                } else if (attendanceDays > targets.maximumAttendanceDays) {
+                    violations.push(`${person.name} 超出最多工作天数 ${attendanceDays - targets.maximumAttendanceDays} 天`);
                 }
                 let consecutiveDays = 0;
                 for (let index = 0; index < dates.length; index += 1) {
@@ -2634,21 +2707,28 @@
                         assignments[dateKey]?.[shift.id]?.includes(person.id)
                     );
                     if ((rule.vacation || rule.block.has('all')) && assignedShifts.length) {
-                        return false;
+                        violations.push(`${person.name} ${dateKey} 与${rule.vacation ? '休假' : '全天不上'}冲突`);
                     }
                     if (assignedShifts.some((shift) => rule.block.has(shift.id))) {
-                        return false;
+                        violations.push(`${person.name} ${dateKey} 被排入固定不上班次`);
                     }
                     if (rule.allow.has('all') && !assignedShifts.length) {
-                        return false;
+                        violations.push(`${person.name} ${dateKey} 指定上班但未安排`);
+                    }
+                    const requiredShifts = [...rule.allow].filter((shiftId) => shiftId !== 'all');
+                    if (
+                        requiredShifts.length
+                        && !assignedShifts.some((shift) => requiredShifts.includes(shift.id))
+                    ) {
+                        violations.push(`${person.name} ${dateKey} 未安排指定班次 ${requiredShifts.join('、')}`);
                     }
                     if (assignedShifts.length > 1) {
-                        return false;
+                        violations.push(`${person.name} ${dateKey} 同时被安排多个班次`);
                     }
 
                     consecutiveDays = assignedShifts.length ? consecutiveDays + 1 : 0;
                     if (consecutiveDays > schedulePolicy.maximumConsecutiveDays) {
-                        return false;
+                        violations.push(`${person.name} 截至 ${dateKey} 连续工作超过 ${schedulePolicy.maximumConsecutiveDays} 天`);
                     }
 
                     if (
@@ -2656,22 +2736,34 @@
                         && index < dates.length - 1
                         && assignments[dates[index + 1].key]?.morning?.includes(person.id)
                     ) {
-                        return false;
+                        violations.push(`${person.name} ${dateKey} 晚班后次日被安排早班`);
                     }
                 }
-
-                return true;
-            }) && dates.every((date) => {
+            });
+            dates.forEach((date) => {
                 const config = getDateConfig(date.key);
                 const assigned = shifts.reduce(
                     (total, shift) => total + (assignments[date.key]?.[shift.id]?.length || 0),
                     0,
                 );
                 const night = assignments[date.key]?.night?.length || 0;
-                return assigned >= config.required && night >= config.minimumNight;
-            }) && collectLockedAssignments().every((item) =>
-                assignments[item.dateKey]?.[item.shiftId]?.includes(item.personId)
-            );
+                if (assigned < config.required) {
+                    violations.push(`${date.key} 在岗人数不足 ${config.required - assigned} 人`);
+                }
+                if (night < config.minimumNight) {
+                    violations.push(`${date.key} 晚班人数不足 ${config.minimumNight - night} 人`);
+                }
+            });
+            collectLockedAssignments().forEach((item) => {
+                if (!assignments[item.dateKey]?.[item.shiftId]?.includes(item.personId)) {
+                    violations.push(`${personName(item.personId)} ${item.dateKey} 的固定${getShiftName(item.shiftId)}班缺失`);
+                }
+            });
+            return [...new Set(violations)];
+        }
+
+        function validateHardConstraints(assignments) {
+            return getHardConstraintViolations(assignments).length === 0;
         }
 
         function getSoftConstraintViolations(assignments) {
@@ -2871,46 +2963,91 @@
             }, 0);
         }
 
-        function scoreSchedule(assignments) {
-            const extraLoads = state.people.map((person) => {
-                const targets = getPersonWorkloadTargets(person.id);
-                const attendanceDays = getWorkDays(assignments, person.id) + targets.paidLeaveDays;
-                return Math.max(0, attendanceDays - targets.minimumAttendanceDays);
+        function getWorkSegments(assignments, personId) {
+            const segments = [];
+            let length = 0;
+            let startIndex = -1;
+            dates.forEach((date, index) => {
+                if (isWorking(assignments, personId, date.key)) {
+                    if (!length) {
+                        startIndex = index;
+                    }
+                    length += 1;
+                } else if (length) {
+                    let restAfter = 1;
+                    while (
+                        index + restAfter < dates.length
+                        && !isWorking(assignments, personId, dates[index + restAfter].key)
+                    ) {
+                        restAfter += 1;
+                    }
+                    segments.push({
+                        length,
+                        hasRestBefore: startIndex > 0,
+                        restAfter,
+                    });
+                    length = 0;
+                    startIndex = -1;
+                }
             });
-            const averageExtra = extraLoads.reduce((sum, days) => sum + days, 0) / state.people.length;
-            const extraSpread = Math.max(...extraLoads) - Math.min(...extraLoads);
-            const fairnessScore = Math.max(0, 30 - (averageExtra * 7.5) - (extraSpread * 7.5));
+            return segments;
+        }
 
-            const averagePreferencePenalty = getSchedulePreferencePenalty(assignments) / state.people.length;
-            const preferenceScore = Math.max(0, 25 - (averagePreferencePenalty * 2.5));
+        function getAssignedShiftId(assignments, personId, dateKey) {
+            return shifts.find((shift) => assignments[dateKey]?.[shift.id]?.includes(personId))?.id || '';
+        }
 
-            const averageSwitches = state.people.reduce(
-                (sum, person) => sum + getShiftSwitchCount(assignments, person.id),
-                0,
-            ) / state.people.length;
-            const stabilityScore = Math.max(0, 20 - (averageSwitches * 2.5));
+        function scoreSchedule(assignments) {
+            let score = 0;
+            const workLoads = state.people.map((person) => getWorkDays(assignments, person.id));
+            const averageLoad = workLoads.reduce((sum, days) => sum + days, 0) / workLoads.length;
 
-            const dailyPlanPenalty = dates.reduce((sum, date) => {
+            state.people.forEach((person, personIndex) => {
+                getWorkSegments(assignments, person.id).forEach((segment) => {
+                    if (segment.length >= 3 && segment.length <= 5) score += 8;
+                    else if (segment.length === 2) score += 3;
+                    else if (segment.length === 1 && segment.hasRestBefore) score -= 3;
+                    else if (segment.length === 6 && segment.restAfter === 1) score -= 3;
+                });
+
+                const counts = getPersonShiftCounts(assignments, person.id);
+                const shiftDifference = Math.abs(counts.morning - counts.night);
+                score += shiftDifference <= 2 ? 5 : -3 * (shiftDifference - 2);
+
+                const preference = getShiftPreference(person.id);
+                if (preference === 'morning') {
+                    score += (counts.morning * 2) - (counts.night * 4);
+                } else if (preference === 'night') {
+                    score += (counts.night * 2) - (counts.morning * 4);
+                } else if (shiftDifference <= 2) {
+                    score += 5;
+                }
+
+                for (let index = 1; index < dates.length; index += 1) {
+                    const previousShift = getAssignedShiftId(assignments, person.id, dates[index - 1].key);
+                    const currentShift = getAssignedShiftId(assignments, person.id, dates[index].key);
+                    if (!previousShift || !currentShift) continue;
+                    if (previousShift === currentShift) {
+                        score += 1;
+                    } else if (
+                        (previousShift === 'morning' && currentShift === 'night')
+                        || (previousShift === 'night' && currentShift === 'morning')
+                    ) {
+                        score -= 2;
+                    }
+                }
+
+                score -= Math.abs(workLoads[personIndex] - averageLoad);
+            });
+
+            dates.forEach((date) => {
                 const morning = assignments[date.key]?.morning?.length || 0;
-                const normal = assignments[date.key]?.normal?.length || 0;
                 const night = assignments[date.key]?.night?.length || 0;
-                return sum + (Math.abs(morning - night) * 2) + (normal * 0.75);
-            }, 0);
-            const dailyBalanceScore = Math.max(0, 15 - (dailyPlanPenalty / dates.length));
+                const difference = Math.abs(morning - night);
+                score += difference <= 2 ? 2 : -2 * (difference - 2);
+            });
 
-            const nearLimitDays = state.people.reduce((total, person) => {
-                let streak = 0;
-                return total + dates.reduce((count, date) => {
-                    streak = isWorking(assignments, person.id, date.key) ? streak + 1 : 0;
-                    return count + Number(streak >= 5);
-                }, 0);
-            }, 0);
-            const consecutiveScore = Math.max(0, 10 - ((nearLimitDays / state.people.length) * 2));
-
-            return Math.max(0, Math.min(
-                100,
-                fairnessScore + preferenceScore + stabilityScore + dailyBalanceScore + consecutiveScore,
-            ));
+            return score;
         }
 
         function cloneLockedAssignments() {
@@ -2992,12 +3129,18 @@
                     },
                     optimization: {
                         rewardScore: {
-                            workloadFairness: 30,
-                            shiftPreference: 25,
-                            shiftStability: 20,
-                            dailyBalance: 15,
-                            consecutiveWorkExperience: 10,
+                            workSegment3To5: 8,
+                            workSegment2: 3,
+                            isolatedWorkDay: -3,
+                            workSegment6: -3,
+                            balancedMorningNight: 5,
+                            preferredShift: 2,
+                            oppositeShift: -4,
+                            sameAdjacentShift: 1,
+                            directMorningNightSwitch: -2,
+                            balancedDailyMorningNight: 2,
                         },
+                        scoreMode: 'reward-rules-v2',
                         aiSolutionCount: AI_SOLUTION_COUNT,
                     },
                 },
