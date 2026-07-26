@@ -1173,7 +1173,10 @@
         const DEPLOYMENT_CONFIG = window.DAIBAN_HOME_CONFIG || {};
         const CONFIGURED_DEEPSEEK_API_KEY = normalizeApiKey(DEPLOYMENT_CONFIG.DEEPSEEK_API_KEY || '');
         const AI_SOLUTION_COUNT = 3;
-        const SCHEDULE_RULES_URL = '排班提示.txt?v=20260727-1';
+        const SCHEDULE_RULES_URL = '排班提示.txt?v=20260727-2';
+        const MAX_ARCHIVE_FILE_SIZE = 20 * 1024 * 1024;
+        const MAX_ARCHIVE_PEOPLE = 300;
+        const MAX_ARCHIVE_DATES = 62;
 
         const state = {
             viewMode: 'shift',
@@ -1214,6 +1217,7 @@
         const calendarTitle = document.getElementById('calendarTitle');
         const toast = document.getElementById('toast');
         const archiveFileInput = document.getElementById('archiveFileInput');
+        const importArchiveBtn = document.getElementById('importArchiveBtn');
         const solveBtn = document.getElementById('solveBtn');
         const aiSolveStatus = document.getElementById('aiSolveStatus');
         let toastTimer = null;
@@ -1313,18 +1317,120 @@
             return scheduleRewardRules;
         }
 
+        function findJsonSegments(content) {
+            const segments = [];
+            let start = -1;
+            let opening = '';
+            let depth = 0;
+            let inString = false;
+            let escaped = false;
+
+            for (let index = 0; index < content.length; index += 1) {
+                const character = content[index];
+                if (inString) {
+                    if (escaped) {
+                        escaped = false;
+                    } else if (character === '\\') {
+                        escaped = true;
+                    } else if (character === '"') {
+                        inString = false;
+                    }
+                    continue;
+                }
+                if (character === '"') {
+                    inString = true;
+                    continue;
+                }
+                if (character === '{' || character === '[') {
+                    if (!depth) {
+                        start = index;
+                        opening = character;
+                    }
+                    depth += 1;
+                } else if (character === '}' || character === ']') {
+                    if (!depth) continue;
+                    const expected = opening === '{' ? '}' : ']';
+                    depth -= 1;
+                    if (!depth && character === expected && start >= 0) {
+                        segments.push(content.slice(start, index + 1));
+                        start = -1;
+                        opening = '';
+                    }
+                }
+            }
+            return segments;
+        }
+
+        function repairJsonText(content) {
+            return content
+                .replace(/[\u201C\u201D]/g, '"')
+                .replace(/[\uFF1A]/g, ':')
+                .replace(/[\uFF0C]/g, ',')
+                .replace(/,\s*([}\]])/g, '$1');
+        }
+
+        function normalizeAiJsonResult(value) {
+            let result = value;
+            for (let depth = 0; depth < 3; depth += 1) {
+                if (typeof result === 'string') {
+                    result = extractJson(result, 'AI 排班');
+                    continue;
+                }
+                if (result && typeof result === 'object' && !Array.isArray(result)) {
+                    if (Array.isArray(result.solutions)) return result;
+                    if (result.solutions && typeof result.solutions === 'object') {
+                        return { ...result, solutions: [result.solutions] };
+                    }
+                    if (result.assignments) return { solutions: [result] };
+                    if (result.schedule?.assignments) {
+                        return {
+                            solutions: [{
+                                ...result,
+                                assignments: result.schedule.assignments,
+                            }],
+                        };
+                    }
+                    const nested = result.data
+                        ?? result.result
+                        ?? result.output
+                        ?? result.candidates
+                        ?? result.solution;
+                    if (nested !== undefined) {
+                        result = nested;
+                        continue;
+                    }
+                }
+                break;
+            }
+            if (Array.isArray(result)) {
+                return { solutions: result };
+            }
+            throw new Error('AI 排班返回的 JSON 缺少 solutions 或 assignments');
+        }
+
         function extractJson(content, stage = 'DeepSeek') {
-            const cleaned = sanitizeText(content).replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
-            const start = cleaned.indexOf('{');
-            const end = cleaned.lastIndexOf('}');
-            if (start < 0 || end <= start) {
-                throw new Error(`${stage}未返回有效 JSON`);
+            if (content && typeof content === 'object') {
+                return content;
             }
-            try {
-                return JSON.parse(cleaned.slice(start, end + 1));
-            } catch {
-                throw new Error(`${stage}返回的 JSON 无法解析`);
+            const cleaned = sanitizeText(content)
+                .replace(/^\s*```(?:json)?\s*/i, '')
+                .replace(/\s*```\s*$/i, '')
+                .trim();
+            const candidates = [cleaned, ...findJsonSegments(cleaned)];
+            const attempted = new Set();
+
+            for (const candidate of candidates) {
+                for (const text of [candidate, repairJsonText(candidate)]) {
+                    if (!text || attempted.has(text)) continue;
+                    attempted.add(text);
+                    try {
+                        return JSON.parse(text);
+                    } catch {
+                        // Try the next complete JSON segment or conservative repair.
+                    }
+                }
             }
+            throw new Error(`${stage}返回的 JSON 无法解析，请重试`);
         }
 
         async function callDeepSeekJson(apiKey, systemPrompt, input) {
@@ -1354,7 +1460,20 @@
             if (!response.ok) {
                 throw new Error(`AI 排班失败：${payload.error?.message || `HTTP ${response.status}`}`);
             }
-            return extractJson(payload.choices?.[0]?.message?.content || '', 'AI 排班');
+            const choice = payload.choices?.[0] || {};
+            const message = choice.message || {};
+            const messageContent = Array.isArray(message.content)
+                ? message.content.map((item) => item?.text || item?.content || '').join('')
+                : message.content;
+            const rawResult = messageContent
+                || message.tool_calls?.[0]?.function?.arguments
+                || message.function_call?.arguments
+                || message.reasoning_content
+                || '';
+            if (choice.finish_reason === 'length') {
+                throw new Error('AI 排班返回内容被截断，请重试');
+            }
+            return normalizeAiJsonResult(extractJson(rawResult, 'AI 排班'));
         }
 
         function getRule(personId, dateKey) {
@@ -1369,18 +1488,18 @@
 
         function getPersonWorkloadTargets(personId) {
             const paidLeaveDays = dates.filter((date) => state.rules[personId]?.[date.key]?.vacation).length;
-            const minimumAttendanceDays = getRequiredAttendanceDays();
-            const minimumWorkDays = Math.max(0, minimumAttendanceDays - paidLeaveDays);
+            const targetAttendanceDays = getRequiredAttendanceDays();
+            const targetWorkDays = Math.max(0, targetAttendanceDays - paidLeaveDays);
             const maximumWorkDays = Math.min(
                 dates.length - paidLeaveDays,
-                minimumWorkDays + schedulePolicy.maximumExtraDays,
+                targetWorkDays + schedulePolicy.maximumExtraDays,
             );
             return {
                 paidLeaveDays,
-                minimumAttendanceDays,
-                maximumAttendanceDays: minimumAttendanceDays + schedulePolicy.maximumExtraDays,
-                minimumWorkDays,
-                preferredWorkDays: minimumWorkDays,
+                targetAttendanceDays,
+                maximumAttendanceDays: targetAttendanceDays + schedulePolicy.maximumExtraDays,
+                targetWorkDays,
+                preferredWorkDays: targetWorkDays,
                 maximumWorkDays,
             };
         }
@@ -2133,6 +2252,7 @@
                 '你是排班优化专家。请根据输入 JSON 生成一个合法且完整的排班候选。',
                 '必须严格遵守奖励规则中的全部硬性规则，并优化奖励分。',
                 '必须返回 JSON 对象，根字段必须为 solutions，不要返回 Markdown 或解释文字。',
+                'JSON 必须紧凑且语法完整，所有字符串使用英文双引号，禁止尾逗号、注释或省略日期。',
                 '每个日期必须包含 morning、normal、night 三个数组，只能使用输入中的人员 ID。',
                 '如果输入中有 repair，必须逐条修复其中的 violations，不得原样返回。',
                 '如果输入中有 acceptedSolutions，新方案应在满足硬约束的前提下与已有方案有所不同。',
@@ -2145,11 +2265,27 @@
             const validDuplicates = [];
             let rejected = 0;
             let repair = null;
+            let parseFailures = 0;
             const maximumAttempts = localSolutions.length ? 9 : 15;
 
             for (let attempt = 0; attempt < maximumAttempts && accepted.length < AI_SOLUTION_COUNT; attempt += 1) {
                 const input = JSON.stringify(buildAiScheduleInput(localSolutions, accepted, repair));
-                const result = await callDeepSeekJson(apiKey, baseSystemPrompt, input);
+                let result;
+                try {
+                    result = await callDeepSeekJson(apiKey, baseSystemPrompt, input);
+                    parseFailures = 0;
+                } catch (error) {
+                    if (!/JSON|截断/.test(error.message) || parseFailures >= 2) {
+                        throw error;
+                    }
+                    parseFailures += 1;
+                    rejected += 1;
+                    repair = {
+                        assignments: {},
+                        violations: ['上次响应不是完整有效的 JSON，请严格按 outputSchema 返回紧凑 JSON'],
+                    };
+                    continue;
+                }
                 const solution = Array.isArray(result.solutions) ? result.solutions[0] : null;
                 if (!solution?.assignments) {
                     repair = {
@@ -2353,12 +2489,6 @@
                     blocking.push(`${person.name} 固定上班 ${fixedDays} 天，超过满勤允许的最多 ${targets.maximumWorkDays} 个工作日`);
                 }
 
-                const availableWorkDays = dates.filter((date) =>
-                    shifts.some((shift) => canUseShiftByRule(person.id, date.key, shift.id))
-                ).length;
-                if (availableWorkDays + targets.paidLeaveDays < targets.minimumAttendanceDays) {
-                    blocking.push(`${person.name} 可排班与带薪休假合计不足满勤 ${targets.minimumAttendanceDays} 天`);
-                }
             });
 
             dates.forEach((date) => {
@@ -2613,8 +2743,8 @@
                     .sort((a, b) => {
                         const aTargets = getPersonWorkloadTargets(a.id);
                         const bTargets = getPersonWorkloadTargets(b.id);
-                        const aDeficit = Math.max(0, aTargets.minimumWorkDays - getWorkDays(assignments, a.id));
-                        const bDeficit = Math.max(0, bTargets.minimumWorkDays - getWorkDays(assignments, b.id));
+                        const aDeficit = Math.max(0, aTargets.targetWorkDays - getWorkDays(assignments, a.id));
+                        const bDeficit = Math.max(0, bTargets.targetWorkDays - getWorkDays(assignments, b.id));
                         return (bDeficit - aDeficit)
                             || (getWorkDays(assignments, a.id) - getWorkDays(assignments, b.id));
                     });
@@ -2694,9 +2824,7 @@
                 const workDays = getWorkDays(assignments, person.id);
                 const targets = getPersonWorkloadTargets(person.id);
                 const attendanceDays = workDays + targets.paidLeaveDays;
-                if (attendanceDays < targets.minimumAttendanceDays) {
-                    violations.push(`${person.name} 满勤不足 ${targets.minimumAttendanceDays - attendanceDays} 天`);
-                } else if (attendanceDays > targets.maximumAttendanceDays) {
+                if (attendanceDays > targets.maximumAttendanceDays) {
                     violations.push(`${person.name} 超出最多工作天数 ${attendanceDays - targets.maximumAttendanceDays} 天`);
                 }
                 let consecutiveDays = 0;
@@ -2771,9 +2899,11 @@
             state.people.forEach((person) => {
                 const targets = getPersonWorkloadTargets(person.id);
                 const attendanceDays = getWorkDays(assignments, person.id) + targets.paidLeaveDays;
-                const extraDays = attendanceDays - targets.minimumAttendanceDays;
-                if (extraDays > 0) {
-                    violations.push(`${person.name} 额外出勤 ${extraDays} 天`);
+                const attendanceDifference = attendanceDays - targets.targetAttendanceDays;
+                if (attendanceDifference !== 0) {
+                    violations.push(
+                        `${person.name} 距离满勤目标${attendanceDifference > 0 ? '多' : '少'} ${Math.abs(attendanceDifference)} 天`
+                    );
                 }
 
                 const preference = getShiftPreference(person.id);
@@ -2805,7 +2935,7 @@
                     const targets = getPersonWorkloadTargets(person.id);
                     return {
                         person,
-                        deficit: Math.max(0, targets.minimumWorkDays - load),
+                        deficit: Math.max(0, targets.targetWorkDays - load),
                         preferenceCost: getCandidatePreferenceCost(assignments, person.id, dateKey, shiftId),
                         load,
                         recent: getRecentWorkDays(assignments, person.id, dateKey),
@@ -3003,6 +3133,10 @@
             const averageLoad = workLoads.reduce((sum, days) => sum + days, 0) / workLoads.length;
 
             state.people.forEach((person, personIndex) => {
+                const targets = getPersonWorkloadTargets(person.id);
+                const attendanceDays = workLoads[personIndex] + targets.paidLeaveDays;
+                score -= Math.abs(attendanceDays - targets.targetAttendanceDays) * 5;
+
                 getWorkSegments(assignments, person.id).forEach((segment) => {
                     if (segment.length >= 3 && segment.length <= 5) score += 8;
                     else if (segment.length === 2) score += 3;
@@ -3139,8 +3273,9 @@
                             sameAdjacentShift: 1,
                             directMorningNightSwitch: -2,
                             balancedDailyMorningNight: 2,
+                            attendanceTargetDifferencePerDay: -5,
                         },
-                        scoreMode: 'reward-rules-v2',
+                        scoreMode: 'reward-rules-v3',
                         aiSolutionCount: AI_SOLUTION_COUNT,
                     },
                 },
@@ -3233,15 +3368,27 @@
 
         function sanitizeAssignments(source, validPeople, validDates) {
             const result = {};
-            validDates.forEach((dateKey) => {
-                result[dateKey] = {};
-                shifts.forEach((shift) => {
-                    const values = source?.[dateKey]?.[shift.id];
-                    result[dateKey][shift.id] = Array.isArray(values)
-                        ? [...new Set(values.filter((personId) => validPeople.has(personId)))]
-                        : [];
-                });
-            });
+            for (const dateKey of validDates) {
+                const sourceDate = source?.[dateKey];
+                const targetDate = {};
+                for (const shift of shifts) {
+                    const values = sourceDate?.[shift.id];
+                    if (!Array.isArray(values) || !values.length) {
+                        targetDate[shift.id] = [];
+                        continue;
+                    }
+                    const seen = new Set();
+                    const people = [];
+                    for (const personId of values) {
+                        if (validPeople.has(personId) && !seen.has(personId)) {
+                            seen.add(personId);
+                            people.push(personId);
+                        }
+                    }
+                    targetDate[shift.id] = people;
+                }
+                result[dateKey] = targetDate;
+            }
             return result;
         }
 
@@ -3258,9 +3405,14 @@
             if (!Array.isArray(archive.period?.dates) || !archive.period.dates.length) {
                 throw new Error('存档中缺少排班周期');
             }
+            if (archive.people.length > MAX_ARCHIVE_PEOPLE) {
+                throw new Error(`存档人员超过 ${MAX_ARCHIVE_PEOPLE} 人，无法安全导入`);
+            }
+            if (archive.period.dates.length > MAX_ARCHIVE_DATES) {
+                throw new Error(`存档日期超过 ${MAX_ARCHIVE_DATES} 天，无法安全导入`);
+            }
 
             const people = archive.people.map((person) => ({
-                ...person,
                 id: String(person.id || '').trim(),
                 name: String(person.name || '').trim(),
             }));
@@ -3326,7 +3478,9 @@
                     maxAttendanceDays: Number(solution.maxAttendanceDays ?? solution.maxCombinedDays) || 0,
                     minExtraDays: Number(solution.minExtraDays) || 0,
                     maxExtraDays: Number(solution.maxExtraDays) || 0,
-                    softViolations: Array.isArray(solution.softViolations) ? [...solution.softViolations] : [],
+                    softViolations: Array.isArray(solution.softViolations)
+                        ? solution.softViolations.slice(0, 200).map((item) => sanitizeText(item).slice(0, 300))
+                        : [],
                     source: solution.source === 'ai' ? 'ai' : 'local',
                     name: sanitizeText(solution.name || '').slice(0, 80),
                     summary: sanitizeText(solution.summary || '').slice(0, 300),
@@ -3369,10 +3523,19 @@
                 preferenceModes,
                 shiftPreferences,
                 diagnostics: archive.diagnostics?.lastSolve
-                    ? { lastSolve: JSON.parse(JSON.stringify(archive.diagnostics.lastSolve)) }
+                    ? {
+                        lastSolve: {
+                            blocking: Array.isArray(archive.diagnostics.lastSolve.blocking)
+                                ? archive.diagnostics.lastSolve.blocking.slice(0, 200).map(sanitizeText)
+                                : [],
+                            warnings: Array.isArray(archive.diagnostics.lastSolve.warnings)
+                                ? archive.diagnostics.lastSolve.warnings.slice(0, 200).map(sanitizeText)
+                                : [],
+                        },
+                    }
                     : { lastSolve: null },
                 extensions: archive.extensions && typeof archive.extensions === 'object'
-                    ? JSON.parse(JSON.stringify(archive.extensions))
+                    ? archive.extensions
                     : {},
             };
         }
@@ -3385,10 +3548,67 @@
             return preference === 'morning' || preference === 'night' || preference === 'balanced';
         }
 
+        function yieldToMainThread() {
+            return new Promise((resolve) => setTimeout(resolve, 0));
+        }
+
+        function parseArchiveJson(text) {
+            if (typeof Worker !== 'function') {
+                return Promise.resolve(JSON.parse(text));
+            }
+            return new Promise((resolve, reject) => {
+                const workerSource = `
+                    self.onmessage = function (event) {
+                        try {
+                            self.postMessage({ ok: true, value: JSON.parse(event.data) });
+                        } catch (error) {
+                            self.postMessage({ ok: false, message: error.message });
+                        }
+                    };
+                `;
+                const workerUrl = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
+                const worker = new Worker(workerUrl);
+                const dispose = () => {
+                    worker.terminate();
+                    URL.revokeObjectURL(workerUrl);
+                };
+                worker.onmessage = (event) => {
+                    const result = event.data || {};
+                    dispose();
+                    if (result.ok) {
+                        resolve(result.value);
+                    } else {
+                        reject(new Error(result.message || 'JSON 格式无效'));
+                    }
+                };
+                worker.onerror = () => {
+                    dispose();
+                    try {
+                        resolve(JSON.parse(text));
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                worker.postMessage(text);
+            });
+        }
+
         async function importArchiveFile(file) {
+            const originalLabel = importArchiveBtn.textContent;
             try {
-                const archive = JSON.parse(await file.text());
+                if (file.size > MAX_ARCHIVE_FILE_SIZE) {
+                    throw new Error(`存档超过 ${Math.round(MAX_ARCHIVE_FILE_SIZE / 1024 / 1024)} MB`);
+                }
+                importArchiveBtn.disabled = true;
+                importArchiveBtn.textContent = '正在读取...';
+                await yieldToMainThread();
+                const text = await file.text();
+                importArchiveBtn.textContent = '正在解析...';
+                await yieldToMainThread();
+                const archive = await parseArchiveJson(text);
                 const imported = parseArchiveData(archive);
+                importArchiveBtn.textContent = '正在渲染...';
+                await yieldToMainThread();
                 dates = imported.dates;
                 state.people = imported.people;
                 state.rules = imported.rules;
@@ -3408,12 +3628,13 @@
                 archiveExtensions = imported.extensions;
                 closeAssignmentActionMenu();
                 closeManualMenu();
-                syncViewSwitch();
                 renderAll();
                 showToast('存档已完整导入');
             } catch (error) {
                 showToast(`导入失败：${error.message}`);
             } finally {
+                importArchiveBtn.disabled = false;
+                importArchiveBtn.textContent = originalLabel;
                 archiveFileInput.value = '';
             }
         }
