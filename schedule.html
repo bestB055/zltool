@@ -983,6 +983,39 @@
             background: rgba(36, 107, 254, 0.08);
         }
 
+        .solution-source {
+            display: inline-flex;
+            margin-left: 6px;
+            padding: 2px 7px;
+            border-radius: 999px;
+            background: rgba(102, 112, 133, 0.12);
+            color: #475467;
+            font-size: 0.72rem;
+            font-weight: 800;
+            vertical-align: middle;
+        }
+
+        .solution-source.ai {
+            background: rgba(123, 97, 255, 0.12);
+            color: #6941c6;
+        }
+
+        .ai-solve-status {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 0.86rem;
+            line-height: 1.5;
+        }
+
+        .ai-solve-status.error {
+            color: var(--red);
+        }
+
+        #solveBtn:disabled {
+            cursor: wait;
+            opacity: 0.68;
+        }
+
         .archive-actions {
             display: flex;
             flex-wrap: wrap;
@@ -1100,6 +1133,7 @@
                     <div>
                         <h2 class="panel-title">候选排班</h2>
                         <p class="muted">自动求解后最多展示 10 个候选方案。</p>
+                    <p class="ai-solve-status" id="aiSolveStatus" aria-live="polite"></p>
                     </div>
                 </div>
                 <div class="panel-body">
@@ -1117,6 +1151,7 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+    <script src="app-config.js"></script>
     <script>
         const shifts = [
             { id: 'morning', name: '早' },
@@ -1133,6 +1168,12 @@
             maximumExtraDays: 2,
             maximumConsecutiveDays: 6,
         };
+        const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
+        const DEEPSEEK_API_KEY_STORAGE = 'split-word-deepseek-api-key';
+        const DEPLOYMENT_CONFIG = window.DAIBAN_HOME_CONFIG || {};
+        const CONFIGURED_DEEPSEEK_API_KEY = normalizeApiKey(DEPLOYMENT_CONFIG.DEEPSEEK_API_KEY || '');
+        const AI_SOLUTION_COUNT = 3;
+        const SCHEDULE_RULES_URL = '排班提示.txt?v=20260726-1';
 
         const state = {
             viewMode: 'shift',
@@ -1173,8 +1214,11 @@
         const calendarTitle = document.getElementById('calendarTitle');
         const toast = document.getElementById('toast');
         const archiveFileInput = document.getElementById('archiveFileInput');
+        const solveBtn = document.getElementById('solveBtn');
+        const aiSolveStatus = document.getElementById('aiSolveStatus');
         let toastTimer = null;
         let archiveExtensions = {};
+        let scheduleRewardRules = '';
 
         function getCycleDates() {
             const today = new Date();
@@ -1219,6 +1263,98 @@
             toast.classList.add('show');
             clearTimeout(toastTimer);
             toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+        }
+
+        function sanitizeText(value) {
+            return String(value ?? '').replace(/[\u200B\u200C\u200D\uFEFF\u2060\u180E]/g, '');
+        }
+
+        function escapeHtml(value) {
+            return sanitizeText(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function normalizeApiKey(value) {
+            return sanitizeText(value).trim().replace(/^Bearer\s+/i, '');
+        }
+
+        function getDeepSeekApiKey() {
+            if (CONFIGURED_DEEPSEEK_API_KEY) {
+                return CONFIGURED_DEEPSEEK_API_KEY;
+            }
+            try {
+                return normalizeApiKey(localStorage.getItem(DEEPSEEK_API_KEY_STORAGE) || '');
+            } catch {
+                return '';
+            }
+        }
+
+        function setAiSolveStatus(message = '', isError = false) {
+            aiSolveStatus.textContent = message;
+            aiSolveStatus.classList.toggle('error', isError);
+        }
+
+        async function loadScheduleRewardRules() {
+            if (scheduleRewardRules) {
+                return scheduleRewardRules;
+            }
+            const response = await fetch(SCHEDULE_RULES_URL, { cache: 'no-store' });
+            if (!response.ok) {
+                throw new Error(`奖励规则加载失败：HTTP ${response.status}`);
+            }
+            scheduleRewardRules = sanitizeText(await response.text()).trim();
+            if (!scheduleRewardRules) {
+                throw new Error('奖励规则文件为空');
+            }
+            return scheduleRewardRules;
+        }
+
+        function extractJson(content, stage = 'DeepSeek') {
+            const cleaned = sanitizeText(content).replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+            const start = cleaned.indexOf('{');
+            const end = cleaned.lastIndexOf('}');
+            if (start < 0 || end <= start) {
+                throw new Error(`${stage}未返回有效 JSON`);
+            }
+            try {
+                return JSON.parse(cleaned.slice(start, end + 1));
+            } catch {
+                throw new Error(`${stage}返回的 JSON 无法解析`);
+            }
+        }
+
+        async function callDeepSeekJson(apiKey, systemPrompt, input) {
+            let response;
+            try {
+                response = await fetch(DEEPSEEK_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${apiKey}`,
+                    },
+                    body: JSON.stringify({
+                        model: 'deepseek-v4-flash',
+                        temperature: 0.45,
+                        max_tokens: 16000,
+                        response_format: { type: 'json_object' },
+                        messages: [
+                            { role: 'system', content: systemPrompt },
+                            { role: 'user', content: input },
+                        ],
+                    }),
+                });
+            } catch {
+                throw new Error('AI 排班网络请求失败');
+            }
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(`AI 排班失败：${payload.error?.message || `HTTP ${response.status}`}`);
+            }
+            return extractJson(payload.choices?.[0]?.message?.content || '', 'AI 排班');
         }
 
         function getRule(personId, dateKey) {
@@ -1818,8 +1954,10 @@
                 ? state.solutions.map((solution, index) => `
                     <div class="solution-card${index === state.activeSolutionIndex ? ' active' : ''}">
                         <div>
-                            <strong>方案 ${index + 1}</strong>
+                            <strong>${escapeHtml(solution.name || `方案 ${index + 1}`)}</strong>
+                            <span class="solution-source${solution.source === 'ai' ? ' ai' : ''}">${solution.source === 'ai' ? 'AI' : '本地'}</span>
                             <p class="muted">共 ${solution.filled} 个在班坑位，满勤目标 ${getRequiredAttendanceDays()} 天，排班+带薪休假 ${solution.minAttendanceDays}-${solution.maxAttendanceDays} 天，额外出勤 ${solution.minExtraDays}-${solution.maxExtraDays} 天，评分 ${solution.score}${solution.softViolations?.length ? `，软约束偏差 ${solution.softViolations.length} 项` : ''}</p>
+                            ${solution.summary ? `<p class="muted">${escapeHtml(solution.summary)}</p>` : ''}
                         </div>
                         <button class="btn ghost" type="button" data-solution-index="${index}">查看</button>
                     </div>
@@ -1899,16 +2037,146 @@
             renderAll();
         }
 
-        function solveSchedules() {
+        function getSolutionSignature(assignments) {
+            return JSON.stringify(sanitizeAssignments(
+                assignments,
+                new Set(state.people.map((person) => person.id)),
+                dates.map((date) => date.key),
+            ));
+        }
+
+        function createSolutionRecord(assignments, metadata = {}) {
+            const attendanceLoads = state.people.map((person) => {
+                const targets = getPersonWorkloadTargets(person.id);
+                return getWorkDays(assignments, person.id) + targets.paidLeaveDays;
+            });
+            const extraLoads = attendanceLoads.map((attendanceDays) =>
+                Math.max(0, attendanceDays - getRequiredAttendanceDays())
+            );
+            return {
+                assignments: cloneAssignments(assignments),
+                filled: countAssignedSlots(assignments),
+                score: Math.round(scoreSchedule(assignments)),
+                minAttendanceDays: Math.min(...attendanceLoads),
+                maxAttendanceDays: Math.max(...attendanceLoads),
+                minExtraDays: Math.min(...extraLoads),
+                maxExtraDays: Math.max(...extraLoads),
+                softViolations: getSoftConstraintViolations(assignments),
+                source: metadata.source === 'ai' ? 'ai' : 'local',
+                name: sanitizeText(metadata.name || '').slice(0, 80),
+                summary: sanitizeText(metadata.summary || '').slice(0, 300),
+            };
+        }
+
+        function buildAiScheduleInput(localSolutions) {
+            return {
+                schemaVersion: '1.1.0',
+                task: 'generate_schedule_candidates',
+                requestedSolutionCount: AI_SOLUTION_COUNT,
+                period: {
+                    dates: dates.map((date) => ({
+                        key: date.key,
+                        weekday: date.weekday,
+                        required: getDateConfig(date.key).required,
+                        minimumNight: getDateConfig(date.key).minimumNight,
+                    })),
+                },
+                shifts: shifts.map((shift) => ({ ...shift })),
+                people: state.people.map((person) => ({
+                    id: person.id,
+                    name: person.name,
+                    shiftPreference: getShiftPreference(person.id),
+                    workloadTargets: getPersonWorkloadTargets(person.id),
+                })),
+                preferences: serializeRules(),
+                lockedAssignments: collectLockedAssignments(),
+                policy: {
+                    ...schedulePolicy,
+                    specialWeekdays: [...schedulePolicy.specialWeekdays],
+                },
+                baselineSolutions: localSolutions.slice(0, 3).map((solution) => ({
+                    score: solution.score,
+                    assignments: solution.assignments,
+                    softViolations: solution.softViolations,
+                })),
+                outputSchema: {
+                    solutions: [{
+                        name: '方案名称',
+                        summary: '方案特点，限 100 字',
+                        assignments: {
+                            'YYYY-MM-DD': {
+                                morning: ['personId'],
+                                normal: ['personId'],
+                                night: ['personId'],
+                            },
+                        },
+                    }],
+                },
+            };
+        }
+
+        async function requestAiScheduleSolutions(localSolutions) {
+            const apiKey = getDeepSeekApiKey();
+            if (!apiKey) {
+                throw new Error('未配置 DeepSeek API Key，本次仅生成本地方案');
+            }
+            const rewardRules = await loadScheduleRewardRules();
+            const systemPrompt = [
+                '你是排班优化专家。请根据输入 JSON 生成合法、完整且有差异的排班候选。',
+                '必须严格遵守奖励规则中的全部硬性规则，并优化奖励分。',
+                '必须返回 JSON 对象，根字段必须为 solutions，不要返回 Markdown 或解释文字。',
+                '每个日期必须包含 morning、normal、night 三个数组，只能使用输入中的人员 ID。',
+                '',
+                rewardRules,
+            ].join('\n');
+            const input = JSON.stringify(buildAiScheduleInput(localSolutions));
+            const result = await callDeepSeekJson(apiKey, systemPrompt, input);
+            const rawSolutions = Array.isArray(result.solutions) ? result.solutions.slice(0, AI_SOLUTION_COUNT) : [];
+            const validPeople = new Set(state.people.map((person) => person.id));
+            const validDates = dates.map((date) => date.key);
+            const accepted = [];
+            let rejected = 0;
+
+            rawSolutions.forEach((solution, index) => {
+                const assignments = sanitizeAssignments(solution?.assignments, validPeople, validDates);
+                if (!validateHardConstraints(assignments)) {
+                    rejected += 1;
+                    return;
+                }
+                const signature = getSolutionSignature(assignments);
+                if (
+                    localSolutions.some((item) => getSolutionSignature(item.assignments) === signature)
+                    || accepted.some((item) => getSolutionSignature(item.assignments) === signature)
+                ) {
+                    rejected += 1;
+                    return;
+                }
+                accepted.push(createSolutionRecord(assignments, {
+                    source: 'ai',
+                    name: solution?.name || `AI 方案 ${index + 1}`,
+                    summary: solution?.summary || '由 AI 根据奖励规则生成并通过本地硬约束校验。',
+                }));
+            });
+
+            return { accepted, rejected, returned: rawSolutions.length };
+        }
+
+        async function solveSchedules() {
             const preflight = analyzeFixedRuleConflicts();
             state.diagnostics.lastSolve = preflight;
+            solveBtn.disabled = true;
+            solveBtn.textContent = '正在排班...';
+            setAiSolveStatus('正在生成本地候选方案...');
 
             const results = [];
             for (let seed = 0; seed < 30 && results.length < 10; seed += 1) {
                 const attempt = buildSchedule(seed);
                 if (attempt) {
-                    const signature = JSON.stringify(attempt.assignments);
-                    if (!results.some((item) => JSON.stringify(item.assignments) === signature)) {
+                    attempt.source = 'local';
+                    attempt.name = `本地方案 ${results.length + 1}`;
+                    attempt.summary = '由现有机械算法生成。';
+                    const signature = getSolutionSignature(attempt.assignments);
+                    if (!results.some((item) => getSolutionSignature(item.assignments) === signature)) {
                         results.push(attempt);
                     }
                 }
@@ -1920,7 +2188,7 @@
             if (results.length) {
                 state.assignments = cloneAssignments(results[0].assignments);
                 state.activeSolutionIndex = 0;
-                showToast(`已生成 ${results.length} 个候选方案`);
+                setAiSolveStatus('本地方案已生成，正在请求 AI 优化方案...');
             } else {
                 const fallback = state.diagnostics.lastSolve || { blocking: [], warnings: [] };
                 fallback.warnings = [
@@ -1931,6 +2199,30 @@
                 showToast(formatScheduleConflictReport(fallback));
             }
             renderAll();
+
+            try {
+                const aiResult = await requestAiScheduleSolutions(results);
+                const localSlots = Math.max(0, 10 - aiResult.accepted.length);
+                state.solutions = [...results.slice(0, localSlots), ...aiResult.accepted]
+                    .sort((a, b) => b.score - a.score);
+                if (state.solutions.length) {
+                    state.assignments = cloneAssignments(state.solutions[0].assignments);
+                    state.activeSolutionIndex = 0;
+                }
+                setAiSolveStatus(
+                    `已生成 ${results.length} 个本地方案；AI 返回 ${aiResult.returned} 个，通过校验 ${aiResult.accepted.length} 个${aiResult.rejected ? `，淘汰 ${aiResult.rejected} 个` : ''}。`,
+                );
+                showToast(`排班完成，共 ${state.solutions.length} 个候选方案`);
+            } catch (error) {
+                setAiSolveStatus(error.message, true);
+                if (results.length) {
+                    showToast(`本地方案已生成；${error.message}`);
+                }
+            } finally {
+                solveBtn.disabled = false;
+                solveBtn.textContent = '自动排班';
+                renderAll();
+            }
         }
 
         function collectLockedAssignments() {
@@ -2585,27 +2877,40 @@
                 const attendanceDays = getWorkDays(assignments, person.id) + targets.paidLeaveDays;
                 return Math.max(0, attendanceDays - targets.minimumAttendanceDays);
             });
-            const extraPenalty = extraLoads.reduce((sum, days) => sum + days, 0) * 1.5;
-            const fairnessPenalty = (Math.max(...extraLoads) - Math.min(...extraLoads)) * 3;
-            const planPenalty = dates.reduce((sum, date) => {
+            const averageExtra = extraLoads.reduce((sum, days) => sum + days, 0) / state.people.length;
+            const extraSpread = Math.max(...extraLoads) - Math.min(...extraLoads);
+            const fairnessScore = Math.max(0, 30 - (averageExtra * 7.5) - (extraSpread * 7.5));
+
+            const averagePreferencePenalty = getSchedulePreferencePenalty(assignments) / state.people.length;
+            const preferenceScore = Math.max(0, 25 - (averagePreferencePenalty * 2.5));
+
+            const averageSwitches = state.people.reduce(
+                (sum, person) => sum + getShiftSwitchCount(assignments, person.id),
+                0,
+            ) / state.people.length;
+            const stabilityScore = Math.max(0, 20 - (averageSwitches * 2.5));
+
+            const dailyPlanPenalty = dates.reduce((sum, date) => {
                 const morning = assignments[date.key]?.morning?.length || 0;
                 const normal = assignments[date.key]?.normal?.length || 0;
                 const night = assignments[date.key]?.night?.length || 0;
-                return sum
-                    + Math.abs(morning - night)
-                    + (Math.max(0, morning - night) * 0.5)
-                    + (normal * 0.5);
+                return sum + (Math.abs(morning - night) * 2) + (normal * 0.75);
             }, 0);
-            const normalizedPlanPenalty = (planPenalty / dates.length) * 4;
-            const normalizedPreferencePenalty = (getSchedulePreferencePenalty(assignments) / state.people.length) * 1.5;
-            return Math.max(
-                0,
-                100
-                    - extraPenalty
-                    - fairnessPenalty
-                    - normalizedPlanPenalty
-                    - normalizedPreferencePenalty,
-            );
+            const dailyBalanceScore = Math.max(0, 15 - (dailyPlanPenalty / dates.length));
+
+            const nearLimitDays = state.people.reduce((total, person) => {
+                let streak = 0;
+                return total + dates.reduce((count, date) => {
+                    streak = isWorking(assignments, person.id, date.key) ? streak + 1 : 0;
+                    return count + Number(streak >= 5);
+                }, 0);
+            }, 0);
+            const consecutiveScore = Math.max(0, 10 - ((nearLimitDays / state.people.length) * 2));
+
+            return Math.max(0, Math.min(
+                100,
+                fairnessScore + preferenceScore + stabilityScore + dailyBalanceScore + consecutiveScore,
+            ));
         }
 
         function cloneLockedAssignments() {
@@ -2685,6 +2990,16 @@
                         specialMinimum: schedulePolicy.specialMinimum,
                         minimumNight: schedulePolicy.minimumNight,
                     },
+                    optimization: {
+                        rewardScore: {
+                            workloadFairness: 30,
+                            shiftPreference: 25,
+                            shiftStability: 20,
+                            dailyBalance: 15,
+                            consecutiveWorkExperience: 10,
+                        },
+                        aiSolutionCount: AI_SOLUTION_COUNT,
+                    },
                 },
                 diagnostics: state.diagnostics.lastSolve
                     ? { lastSolve: JSON.parse(JSON.stringify(state.diagnostics.lastSolve)) }
@@ -2715,6 +3030,9 @@
                         minExtraDays: solution.minExtraDays,
                         maxExtraDays: solution.maxExtraDays,
                         softViolations: [...(solution.softViolations || [])],
+                        source: solution.source === 'ai' ? 'ai' : 'local',
+                        name: sanitizeText(solution.name || '').slice(0, 80),
+                        summary: sanitizeText(solution.summary || '').slice(0, 300),
                     })),
                     activeSolutionIndex: state.activeSolutionIndex,
                 },
@@ -2866,6 +3184,9 @@
                     minExtraDays: Number(solution.minExtraDays) || 0,
                     maxExtraDays: Number(solution.maxExtraDays) || 0,
                     softViolations: Array.isArray(solution.softViolations) ? [...solution.softViolations] : [],
+                    source: solution.source === 'ai' ? 'ai' : 'local',
+                    name: sanitizeText(solution.name || '').slice(0, 80),
+                    summary: sanitizeText(solution.summary || '').slice(0, 300),
                 }));
 
             const preferenceShifts = {};

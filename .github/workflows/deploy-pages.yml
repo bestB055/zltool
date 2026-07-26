@@ -14,6 +14,7 @@ on:
       - 'recent-updates.css'
       - 'recent-updates.js'
       - 'recent-updates.md'
+      - '排班提示.txt'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
@@ -43,7 +44,7 @@ jobs:
           DOUBAO_SEARCH_API_KEY: ${{ vars.DOUBAO_SEARCH_API_KEY }}
         run: |
           mkdir -p site
-          cp home.html index.html schedule.html web-tracker.html app-config.js recent-updates.css recent-updates.js recent-updates.md site/
+          cp home.html index.html schedule.html web-tracker.html app-config.js recent-updates.css recent-updates.js recent-updates.md 排班提示.txt site/
           python - <<'PY'
           import json
           import os
