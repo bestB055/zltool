@@ -6,7 +6,6 @@
     <title>自动排班 - 带班首页</title>
     <link rel="stylesheet" href="recent-updates.css?v=20260724-2">
     <script src="recent-updates.js?v=20260724-2" defer></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -22,6 +21,9 @@
             --green: #12a150;
             --orange: #f79009;
             --red: #d92d20;
+            --morning-shift: #A5C3F4;
+            --night-shift: #B7D7A6;
+            --rest-shift: #B5A7D6;
             --text: #162033;
             --muted: #667085;
             --card: rgba(255, 255, 255, 0.9);
@@ -50,7 +52,15 @@
         }
 
         button {
+            appearance: none;
+            border: 0;
             cursor: pointer;
+        }
+
+        button:focus-visible,
+        a:focus-visible {
+            outline: 3px solid rgba(36, 107, 254, 0.24);
+            outline-offset: 2px;
         }
 
         .page {
@@ -229,6 +239,30 @@
             box-shadow: 0 4px 12px rgba(21, 54, 120, 0.12);
         }
 
+        .calendar-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .calendar-export-btn {
+            min-height: 38px;
+            padding: 0 14px;
+            border: 1px solid rgba(36, 107, 254, 0.14);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.78);
+            color: var(--primary-dark);
+            font-size: 0.82rem;
+            font-weight: 900;
+            box-shadow: 0 6px 16px rgba(21, 54, 120, 0.08);
+        }
+
+        .calendar-export-btn:hover {
+            background: rgba(36, 107, 254, 0.08);
+        }
+
         .panel-body {
             width: 100%;
             max-width: 100%;
@@ -256,11 +290,12 @@
 
         .schedule-table th,
         .schedule-table td {
-            border-right: 1px solid rgba(36, 107, 254, 0.1);
-            border-bottom: 1px solid rgba(36, 107, 254, 0.1);
+            border-right: 1px solid rgba(36, 107, 254, 0.08);
+            border-bottom: 1px solid rgba(36, 107, 254, 0.08);
             padding: 10px;
             vertical-align: top;
-            background: rgba(255, 255, 255, 0.68);
+            background: rgba(255, 255, 255, 0.74);
+            transition: background 0.16s ease;
         }
 
         .schedule-table th {
@@ -280,6 +315,22 @@
             background: #f6f9ff;
             color: var(--primary-dark);
             font-weight: 900;
+        }
+
+        .schedule-table tr:nth-child(2n) td {
+            background: rgba(239, 246, 255, 0.64);
+        }
+
+        .schedule-table tr:nth-child(2n) .row-head {
+            background: #edf4ff;
+        }
+
+        .schedule-table tr:hover td {
+            background: rgba(36, 107, 254, 0.08);
+        }
+
+        .schedule-table tr:hover .row-head {
+            background: #e6f0ff;
         }
 
         .date-head {
@@ -323,8 +374,8 @@
         }
 
         .date-rule-pill.rest {
-            background: rgba(247, 144, 9, 0.14);
-            color: #b54708;
+            background: var(--rest-shift);
+            color: #3d2b70;
         }
 
         .date-rule-pill .pill-delete {
@@ -421,27 +472,32 @@
             gap: 4px;
             max-width: 100%;
             padding: 4px 7px;
+            border: 1px solid rgba(36, 107, 254, 0.08);
             border-radius: 999px;
             background: rgba(36, 107, 254, 0.1);
             color: var(--primary-dark);
             font-size: 0.76rem;
             font-weight: 800;
             line-height: 1.2;
+            box-shadow: 0 1px 2px rgba(21, 54, 120, 0.04);
         }
 
         .pill.locked {
+            border-color: rgba(18, 161, 80, 0.12);
             background: rgba(18, 161, 80, 0.14);
             color: #027a48;
         }
 
         .pill.blocked {
+            border-color: rgba(217, 45, 32, 0.12);
             background: rgba(217, 45, 32, 0.12);
             color: #b42318;
         }
 
         .pill.warning {
-            background: rgba(247, 144, 9, 0.14);
-            color: #b54708;
+            border-color: rgba(247, 144, 9, 0.14);
+            background: var(--rest-shift);
+            color: #3d2b70;
         }
 
         .assignment-action-menu {
@@ -779,23 +835,37 @@
         .shift-tab {
             min-height: 34px;
             padding: 0 12px;
-            border: 1px solid rgba(36, 107, 254, 0.14);
+            border: 1px solid rgba(36, 107, 254, 0.12);
             border-radius: 999px;
-            background: rgba(255, 255, 255, 0.74);
-            color: var(--primary-dark);
+            background: rgba(255, 255, 255, 0.78);
+            color: var(--muted);
             font-size: 0.82rem;
             font-weight: 900;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.46);
+            transition: background 0.16s, border-color 0.16s, color 0.16s, box-shadow 0.16s;
         }
 
         .shift-tab.active {
             border-color: var(--primary);
-            background: rgba(36, 107, 254, 0.12);
+            background: rgba(36, 107, 254, 0.14);
+            color: var(--primary-dark);
+            box-shadow: 0 6px 16px rgba(36, 107, 254, 0.12);
         }
 
-        .shift-tab.rest.active {
-            border-color: var(--orange);
-            background: rgba(247, 144, 9, 0.14);
-            color: #b54708;
+        .date-chip.active.shift-morning,
+        .pill[data-shift="morning"],
+        .fixed-tag.shift-morning {
+            border-color: rgba(90, 130, 196, 0.28);
+            background: var(--morning-shift);
+            color: #163a6d;
+        }
+
+        .date-chip.active.shift-night,
+        .pill[data-shift="night"],
+        .fixed-tag.shift-night {
+            border-color: rgba(92, 143, 76, 0.28);
+            background: var(--night-shift);
+            color: #244f1d;
         }
 
         .mode-tabs {
@@ -865,9 +935,9 @@
         }
 
         .date-chip.rest-active {
-            border-color: var(--orange);
-            background: rgba(247, 144, 9, 0.14);
-            color: #b54708;
+            border-color: rgba(106, 84, 158, 0.28);
+            background: var(--rest-shift);
+            color: #3d2b70;
         }
 
         .date-chip.block-active {
@@ -889,12 +959,12 @@
             font-size: 0.76rem;
             font-weight: 900;
             line-height: 1;
-            cursor: grab;
+            cursor: default;
         }
 
         .fixed-tag.rest {
-            background: rgba(247, 144, 9, 0.14);
-            color: #b54708;
+            background: var(--rest-shift);
+            color: #3d2b70;
         }
 
         .fixed-tag.blocked {
@@ -1110,9 +1180,12 @@
                         <h2 class="panel-title" id="calendarTitle">日历排班</h2>
                         <p class="muted">点击已排班人员标签，可选择固定状态或删除该安排。</p>
                     </div>
-                    <div class="view-switch" role="group" aria-label="日历视图">
-                        <button class="view-switch-option active" type="button" id="shiftViewBtn">班次</button>
-                        <button class="view-switch-option" type="button" id="personViewBtn">人员</button>
+                    <div class="calendar-actions">
+                        <button class="calendar-export-btn" type="button" id="exportScheduleTextBtn">导出</button>
+                        <div class="view-switch" role="group" aria-label="日历视图">
+                            <button class="view-switch-option active" type="button" id="shiftViewBtn">班次</button>
+                            <button class="view-switch-option" type="button" id="personViewBtn">人员</button>
+                        </div>
                     </div>
                 </div>
                 <div class="panel-body">
@@ -1141,9 +1214,8 @@
                     <div>
                         <h2 class="panel-title">候选排班</h2>
                         <p class="muted">自动求解后最多展示 10 个候选方案。</p>
-                        <p class="ai-solve-status" id="aiSolveStatus" aria-live="polite"></p>
+                    <p class="ai-solve-status" id="aiSolveStatus" aria-live="polite"></p>
                     </div>
-                    <button class="btn ghost" type="button" id="exportScheduleBtn">导出 Excel</button>
                 </div>
                 <div class="panel-body">
                     <div class="solution-list" id="solutionList"></div>
@@ -1538,10 +1610,7 @@
                 hasLockedAssignment(personId, dateKey, shift.id)
             );
             if (lockedShift) {
-                const key = assignmentKey(dateKey, lockedShift.id, personId);
-                return state.lockOrigins[key] === 'calendar'
-                    ? '该日期已有日历固定班次，请先点击排班标签并删除固定班次'
-                    : '该日期已在人员固定班次中设置，请先回到人员卡片修改';
+                return '该日期已有固定班次，请先点击排班按钮取消固定或删除';
             }
             if (hasPreferenceRule(personId, dateKey)) {
                 return '该日期已在人员固定班次中设置，请先回到人员卡片修改';
@@ -1636,17 +1705,6 @@
                 `;
             }).join('');
 
-            peopleList.querySelectorAll('[data-fixed-tag]').forEach((tag) => {
-                tag.addEventListener('dragstart', (event) => {
-                    event.dataTransfer.setData('text/plain', JSON.stringify({
-                        personId: tag.dataset.person,
-                        dateKey: tag.dataset.date,
-                        shiftId: tag.dataset.shift,
-                        mode: tag.dataset.mode,
-                    }));
-                });
-            });
-
             syncPreferencePlacement();
         }
 
@@ -1702,8 +1760,11 @@
                     ? rule.block.has(currentShift)
                     : rule.allow.has(currentShift);
             const activeClass = active ? (currentShift === 'rest' ? ' rest-active' : currentMode === 'block' ? ' block-active' : ' active') : '';
+            const shiftClass = active && currentMode === 'work' && ['morning', 'night'].includes(currentShift)
+                ? ` shift-${currentShift}`
+                : '';
             return `
-                <button class="date-chip${activeClass}" type="button" data-pref-date="${date.key}" data-person="${personId}">
+                <button class="date-chip${activeClass}${shiftClass}" type="button" data-pref-date="${date.key}" data-person="${personId}">
                     ${date.label} 周${date.weekday}
                 </button>
             `;
@@ -1735,36 +1796,13 @@
         function renderFixedTag(personId, dateKey, shiftId, mode, label) {
             const restClass = shiftId === 'rest' ? ' rest' : '';
             const blockClass = mode === 'block' ? ' blocked' : '';
-            const key = assignmentKey(dateKey, shiftId, personId);
-            const isCalendarLock = mode === 'work' && state.lockOrigins[key] === 'calendar';
-            if (isCalendarLock) {
-                return `<span class="fixed-tag${restClass}${blockClass}" title="请在日历排班标签中删除">${label}（日历固定）</span>`;
-            }
+            const shiftClass = ['morning', 'night'].includes(shiftId) ? ` shift-${shiftId}` : '';
             return `
-                <span class="fixed-tag${restClass}${blockClass}" draggable="true" data-fixed-tag data-person="${personId}" data-date="${dateKey}" data-shift="${shiftId}" data-mode="${mode}">
-                    ${label}
-                    <button class="delete-tag" type="button" data-delete-fixed data-person="${personId}" data-date="${dateKey}" data-shift="${shiftId}" data-mode="${mode}" aria-label="删除固定项">×</button>
-                </span>
+                <span class="fixed-tag${restClass}${blockClass}${shiftClass}">${label}</span>
             `;
         }
 
-        function parseDragData(event) {
-            try {
-                return JSON.parse(event.dataTransfer.getData('text/plain'));
-            } catch (error) {
-                return null;
-            }
-        }
-
         function togglePreferenceDate(personId, dateKey) {
-            const calendarLock = shifts.some((shift) => {
-                const key = assignmentKey(dateKey, shift.id, personId);
-                return state.locked[key] && state.lockOrigins[key] === 'calendar';
-            });
-            if (calendarLock) {
-                showToast('该日期已有日历固定班次，请先在日历排班标签中删除');
-                return;
-            }
             const shiftId = getPreferenceShift(personId);
             const mode = getPreferenceMode(personId);
             const rule = getRule(personId, dateKey);
@@ -1785,29 +1823,6 @@
             } else {
                 setFixedShift(personId, dateKey, shiftId);
             }
-        }
-
-        function movePreference(source, targetDateKey, targetShiftId) {
-            const targetCalendarLock = shifts.some((shift) => {
-                const key = assignmentKey(targetDateKey, shift.id, source.personId);
-                return state.locked[key] && state.lockOrigins[key] === 'calendar';
-            });
-            if (targetCalendarLock) {
-                showToast('目标日期已有日历固定班次，请先在日历排班标签中删除');
-                return;
-            }
-            if (source.personId !== state.selectedPersonId) {
-                state.selectedPersonId = source.personId;
-            }
-            removePreference(source.personId, source.dateKey, source.shiftId, source.mode);
-            if (source.mode === 'rest' || targetShiftId === 'rest') {
-                setVacation(source.personId, targetDateKey);
-            } else if (source.mode === 'block') {
-                setBlockedShift(source.personId, targetDateKey, targetShiftId);
-            } else {
-                setFixedShift(source.personId, targetDateKey, targetShiftId);
-            }
-            showToast('已移动固定项');
         }
 
         function setVacation(personId, dateKey) {
@@ -1893,6 +1908,13 @@
             getRule(personId, dateKey).allow.delete(shiftId);
         }
 
+        function unlockAssignment(personId, dateKey, shiftId) {
+            const key = assignmentKey(dateKey, shiftId, personId);
+            delete state.locked[key];
+            delete state.lockOrigins[key];
+            getRule(personId, dateKey).allow.delete(shiftId);
+        }
+
         function showAssignmentActionMenu(anchor) {
             closeAssignmentActionMenu();
             const personId = anchor.dataset.person;
@@ -1900,17 +1922,20 @@
             const shiftId = anchor.dataset.shift;
             const key = assignmentKey(dateKey, shiftId, personId);
             const isLocked = Boolean(state.locked[key]);
-            const lockOrigin = state.lockOrigins[key] || 'preference';
             const menu = document.createElement('div');
             menu.className = 'assignment-action-menu';
-            if (isLocked && lockOrigin === 'preference') {
-                menu.innerHTML = '<button class="assignment-action" type="button" data-preference-lock-note>请到人员固定班次中修改</button>';
-                menu.querySelector('[data-preference-lock-note]').addEventListener('click', () => {
+            if (isLocked) {
+                menu.innerHTML = `
+                    <button class="assignment-action" type="button" data-assignment-unlock-action>取消固定</button>
+                    <button class="assignment-action delete" type="button" data-assignment-delete-action>删除</button>
+                `;
+                menu.querySelector('[data-assignment-unlock-action]').addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    unlockAssignment(personId, dateKey, shiftId);
+                    showToast('已取消固定，保留当前排班');
                     closeAssignmentActionMenu();
-                    showToast('此排班来自人员固定班次，请回到人员卡片修改');
+                    refreshPeopleAndCalendar();
                 });
-            } else if (isLocked) {
-                menu.innerHTML = '<button class="assignment-action delete" type="button" data-assignment-delete-action>删除固定班次</button>';
             } else {
                 menu.innerHTML = `
                     <button class="assignment-action" type="button" data-assignment-lock-action>固定</button>
@@ -2173,6 +2198,79 @@
                     renderAll();
                 });
             });
+        }
+
+        function normalizeTableCell(value) {
+            return sanitizeText(value).replace(/[\t\r\n]+/g, ' ').trim();
+        }
+
+        function getPersonDayExportValue(personId, dateKey) {
+            if (getRule(personId, dateKey).vacation) {
+                return '休';
+            }
+            const assignedShift = shifts.find((shift) =>
+                getAssignment(dateKey, shift.id).includes(personId)
+            );
+            return assignedShift?.name || '休';
+        }
+
+        function buildPersonViewScheduleText() {
+            const header = [
+                '人员',
+                ...dates.map((date) => `${date.label}周${date.weekday}`),
+            ];
+            const rows = state.people.map((person) => [
+                normalizeTableCell(person.name),
+                ...dates.map((date) => getPersonDayExportValue(person.id, date.key)),
+            ]);
+            return [header, ...rows].map((row) => row.join('\t')).join('\n');
+        }
+
+        async function copyTextToClipboard(text) {
+            if (navigator.clipboard?.writeText) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    return;
+                } catch {
+                    // Fall back to the selection-based copy path below.
+                }
+            }
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'fixed';
+            textarea.style.left = '-9999px';
+            textarea.style.top = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            const copied = document.execCommand('copy');
+            textarea.remove();
+            if (!copied) {
+                throw new Error('浏览器阻止了剪贴板写入');
+            }
+        }
+
+        function downloadScheduleText(text) {
+            const blob = new Blob([text], { type: 'text/tab-separated-values;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${formatArchiveTimestamp()}-人员视图排班.tsv`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        }
+
+        async function exportScheduleText() {
+            const text = buildPersonViewScheduleText();
+            try {
+                await copyTextToClipboard(text);
+                showToast('已复制人员视图排班，可直接粘贴到表格');
+            } catch (error) {
+                downloadScheduleText(text);
+                showToast('剪贴板受限，已下载 TSV 表格文件');
+            }
         }
 
         function getShiftName(shiftId) {
@@ -3409,62 +3507,6 @@
             ].join('');
         }
 
-        function getPersonScheduleExportValue(personId, dateKey) {
-            if (getRule(personId, dateKey).vacation) {
-                return '假';
-            }
-            const shiftId = getAssignedShiftId(state.assignments, personId, dateKey);
-            return {
-                morning: '早',
-                normal: '常',
-                night: '晚',
-            }[shiftId] || '休';
-        }
-
-        function buildPersonScheduleExportData() {
-            const header = [
-                '人员',
-                ...dates.map((date) => `${date.label} 周${date.weekday}`),
-            ];
-            const rows = state.people.map((person) => [
-                person.name,
-                ...dates.map((date) => getPersonScheduleExportValue(person.id, date.key)),
-            ]);
-            return [header, ...rows];
-        }
-
-        function exportScheduleExcel() {
-            if (!window.XLSX?.utils) {
-                showToast('导出失败：Excel 组件未加载，请检查网络后重试');
-                return;
-            }
-            if (!state.people.length || !dates.length) {
-                showToast('暂无可导出的排班结果');
-                return;
-            }
-
-            const worksheet = XLSX.utils.aoa_to_sheet(buildPersonScheduleExportData());
-            worksheet['!cols'] = [
-                { wch: Math.max(10, ...state.people.map((person) => person.name.length + 2)) },
-                ...dates.map(() => ({ wch: 10 })),
-            ];
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, '人员排班');
-            const content = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-            const blob = new Blob([content], {
-                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `排班结果_${dates[0].key}_${dates[dates.length - 1].key}_${formatArchiveTimestamp()}.xlsx`;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            URL.revokeObjectURL(url);
-            showToast('人员排班 Excel 已导出');
-        }
-
         function exportArchive() {
             const content = JSON.stringify(createArchiveData(), null, 2);
             const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
@@ -3835,7 +3877,7 @@
             renderCalendar();
         });
 
-        document.getElementById('exportScheduleBtn').addEventListener('click', exportScheduleExcel);
+        document.getElementById('exportScheduleTextBtn').addEventListener('click', exportScheduleText);
         document.getElementById('exportArchiveBtn').addEventListener('click', exportArchive);
         document.getElementById('importArchiveBtn').addEventListener('click', () => archiveFileInput.click());
         archiveFileInput.addEventListener('change', () => {
@@ -3947,41 +3989,6 @@
                 return;
             }
 
-            const deleteButton = target.closest('[data-delete-fixed]');
-            if (deleteButton) {
-                event.preventDefault();
-                event.stopPropagation();
-                removePreference(deleteButton.dataset.person, deleteButton.dataset.date, deleteButton.dataset.shift, deleteButton.dataset.mode);
-                refreshPeopleAndCalendar();
-            }
-        });
-
-        peopleList.addEventListener('dragover', (event) => {
-            if (event.target.closest('[data-pref-shift], [data-pref-date]')) {
-                event.preventDefault();
-            }
-        });
-
-        peopleList.addEventListener('drop', (event) => {
-            const dragData = parseDragData(event);
-            if (!dragData) {
-                return;
-            }
-
-            const shiftButton = event.target.closest('[data-pref-shift]');
-            if (shiftButton) {
-                event.preventDefault();
-                movePreference(dragData, dragData.dateKey, shiftButton.dataset.prefShift);
-                refreshPeopleAndCalendar();
-                return;
-            }
-
-            const dateButton = event.target.closest('[data-pref-date]');
-            if (dateButton) {
-                event.preventDefault();
-                movePreference(dragData, dateButton.dataset.prefDate, dragData.shiftId);
-                refreshPeopleAndCalendar();
-            }
         });
 
         calendarWrap.addEventListener('click', (event) => {
