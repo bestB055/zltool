@@ -1,3 +1,6 @@
+/* ============================================================
+   全局：隐藏默认光标，仅在可编辑元素中显示
+   ============================================================ */
 body {
     caret-color: transparent;
 }
@@ -9,24 +12,35 @@ select,
     caret-color: auto;
 }
 
+/* ============================================================
+   更新日志挂件容器 — 定位在页面主体右上角
+   ============================================================ */
+.page,
+.container {
+    position: relative;
+}
+
 .recent-updates-widget {
-    position: fixed;
+    position: absolute;
     top: 14px;
-    right: 14px;
+    right: 0;
     z-index: 9999;
-    padding-bottom: 8px;
+    padding-bottom: 8px; /* 为面板留出间距 */
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
+/* ----------------------------------------------------------
+   触发按钮 — 圆角药丸风格，红色调
+   ---------------------------------------------------------- */
 .recent-updates-button {
     display: inline-flex;
     align-items: center;
     min-height: 32px;
     padding: 0 12px;
-    border: 1px solid rgba(255, 107, 107, 0.22);
-    border-radius: 999px;
-    background: rgba(255, 245, 245, 0.92);
-    color: #d94a4a;
+    border: 1px solid rgba(217, 74, 74, 0.28);
+    border-radius: 999px; /* 胶囊形 */
+    background: #d94a4a;
+    color: rgba(255, 245, 245, 0.96);
     font-size: 12px;
     font-weight: 800;
     line-height: 1;
@@ -36,48 +50,58 @@ select,
     transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
+/* 悬停：微微上浮 + 边框加深 + 阴影增强 */
 .recent-updates-button:hover {
     transform: translateY(-1px);
-    border-color: rgba(255, 107, 107, 0.4);
-    background: #fff;
+    border-color: rgba(217, 74, 74, 0.45);
+    background: #c83f3f;
     box-shadow: 0 14px 30px rgba(217, 74, 74, 0.18);
 }
 
+/* ----------------------------------------------------------
+   弹出面板 — 默认隐藏，hover / focus / .open 时显示
+   ---------------------------------------------------------- */
 .recent-updates-panel {
     position: absolute;
-    top: 100%;
+    top: 100%; /* 紧贴按钮下方 */
     right: 0;
-    width: min(360px, calc(100vw - 28px));
+    width: min(360px, calc(100vw - 28px)); /* 自适应，不超过视口 */
     max-height: min(420px, calc(100vh - 70px));
-    overflow: auto;
+    overflow: auto; /* 内容过多时滚动 */
     padding: 16px;
     border: 1px solid rgba(255, 107, 107, 0.18);
     border-radius: 16px;
     background: rgba(255, 255, 255, 0.96);
     color: #162033;
     box-shadow: 0 18px 48px rgba(22, 32, 51, 0.18);
+    /* 默认隐藏：透明 + 不可见 + 不可交互 + 微上移 */
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
     transform: translateY(-4px);
     transition: opacity 0.16s, transform 0.16s, visibility 0.16s;
-    backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px); /* 毛玻璃效果 */
 }
 
+/* 显示面板的三种触发方式 */
 .recent-updates-widget:hover .recent-updates-panel,
 .recent-updates-widget:focus-within .recent-updates-panel,
 .recent-updates-widget.open .recent-updates-panel {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
-    transform: translateY(0);
+    transform: translateY(0); /* 归位动画 */
 }
 
+/* ----------------------------------------------------------
+   面板内容排版
+   ---------------------------------------------------------- */
 .recent-updates-content {
     font-size: 13px;
     line-height: 1.65;
 }
 
+/* 标题层级 */
 .recent-updates-content h1,
 .recent-updates-content h2,
 .recent-updates-content h3 {
@@ -90,10 +114,12 @@ select,
 .recent-updates-content h2 { font-size: 16px; }
 .recent-updates-content h3 { font-size: 14px; }
 
+/* 段落与列表间距 */
 .recent-updates-content p { margin: 8px 0; }
 .recent-updates-content ul { margin: 8px 0 8px 18px; }
 .recent-updates-content li { margin: 5px 0; }
 
+/* 行内代码样式 */
 .recent-updates-content code {
     padding: 2px 5px;
     border-radius: 6px;
@@ -101,9 +127,12 @@ select,
     color: #344054;
 }
 
+/* ----------------------------------------------------------
+   响应式：小屏幕下缩小边距
+   ---------------------------------------------------------- */
 @media (max-width: 640px) {
     .recent-updates-widget {
         top: 10px;
-        right: 10px;
+        right: 0;
     }
 }
