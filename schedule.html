@@ -6,6 +6,7 @@
     <title>自动排班 - 带班首页</title>
     <link rel="stylesheet" href="recent-updates.css?v=20260724-2">
     <script src="recent-updates.js?v=20260724-2" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -1140,8 +1141,9 @@
                     <div>
                         <h2 class="panel-title">候选排班</h2>
                         <p class="muted">自动求解后最多展示 10 个候选方案。</p>
-                    <p class="ai-solve-status" id="aiSolveStatus" aria-live="polite"></p>
+                        <p class="ai-solve-status" id="aiSolveStatus" aria-live="polite"></p>
                     </div>
+                    <button class="btn ghost" type="button" id="exportScheduleBtn">导出 Excel</button>
                 </div>
                 <div class="panel-body">
                     <div class="solution-list" id="solutionList"></div>
@@ -3407,6 +3409,62 @@
             ].join('');
         }
 
+        function getPersonScheduleExportValue(personId, dateKey) {
+            if (getRule(personId, dateKey).vacation) {
+                return '假';
+            }
+            const shiftId = getAssignedShiftId(state.assignments, personId, dateKey);
+            return {
+                morning: '早',
+                normal: '常',
+                night: '晚',
+            }[shiftId] || '休';
+        }
+
+        function buildPersonScheduleExportData() {
+            const header = [
+                '人员',
+                ...dates.map((date) => `${date.label} 周${date.weekday}`),
+            ];
+            const rows = state.people.map((person) => [
+                person.name,
+                ...dates.map((date) => getPersonScheduleExportValue(person.id, date.key)),
+            ]);
+            return [header, ...rows];
+        }
+
+        function exportScheduleExcel() {
+            if (!window.XLSX?.utils) {
+                showToast('导出失败：Excel 组件未加载，请检查网络后重试');
+                return;
+            }
+            if (!state.people.length || !dates.length) {
+                showToast('暂无可导出的排班结果');
+                return;
+            }
+
+            const worksheet = XLSX.utils.aoa_to_sheet(buildPersonScheduleExportData());
+            worksheet['!cols'] = [
+                { wch: Math.max(10, ...state.people.map((person) => person.name.length + 2)) },
+                ...dates.map(() => ({ wch: 10 })),
+            ];
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, '人员排班');
+            const content = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([content], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `排班结果_${dates[0].key}_${dates[dates.length - 1].key}_${formatArchiveTimestamp()}.xlsx`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            showToast('人员排班 Excel 已导出');
+        }
+
         function exportArchive() {
             const content = JSON.stringify(createArchiveData(), null, 2);
             const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
@@ -3777,6 +3835,7 @@
             renderCalendar();
         });
 
+        document.getElementById('exportScheduleBtn').addEventListener('click', exportScheduleExcel);
         document.getElementById('exportArchiveBtn').addEventListener('click', exportArchive);
         document.getElementById('importArchiveBtn').addEventListener('click', () => archiveFileInput.click());
         archiveFileInput.addEventListener('change', () => {
