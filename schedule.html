@@ -407,6 +407,13 @@
             background: rgba(36, 107, 254, 0.12);
         }
 
+        .manual-option:disabled {
+            cursor: not-allowed;
+            opacity: 0.48;
+            background: #f2f4f7;
+            color: var(--muted);
+        }
+
         .pill {
             display: inline-flex;
             align-items: center;
@@ -1203,6 +1210,7 @@
             rules: {},
             assignments: {},
             locked: {},
+            lockOrigins: {},
             solutions: [],
             activeSolutionIndex: -1,
             diagnostics: {
@@ -1518,6 +1526,27 @@
             return `${dateKey}|${shiftId}|${personId}`;
         }
 
+        function hasPreferenceRule(personId, dateKey) {
+            const rule = getRule(personId, dateKey);
+            return rule.vacation || rule.allow.size > 0 || rule.block.size > 0;
+        }
+
+        function getManualEditBlockReason(personId, dateKey) {
+            const lockedShift = shifts.find((shift) =>
+                hasLockedAssignment(personId, dateKey, shift.id)
+            );
+            if (lockedShift) {
+                const key = assignmentKey(dateKey, lockedShift.id, personId);
+                return state.lockOrigins[key] === 'calendar'
+                    ? '该日期已有日历固定班次，请先点击排班标签并删除固定班次'
+                    : '该日期已在人员固定班次中设置，请先回到人员卡片修改';
+            }
+            if (hasPreferenceRule(personId, dateKey)) {
+                return '该日期已在人员固定班次中设置，请先回到人员卡片修改';
+            }
+            return '';
+        }
+
         function renderRange() {
             rangeText.textContent = `默认周期：${dates[0].full} 至 ${dates[dates.length - 1].full}。满勤 ${getRequiredAttendanceDays()} 天（${getRequiredAttendanceHours()} 小时），工作日至少 ${schedulePolicy.weekdayMinimum} 人，周末至少 ${schedulePolicy.weekendMinimum} 人，周一/周三至少 ${schedulePolicy.specialMinimum} 人；每人最多多排 ${schedulePolicy.maximumExtraDays} 天。`;
         }
@@ -1704,6 +1733,11 @@
         function renderFixedTag(personId, dateKey, shiftId, mode, label) {
             const restClass = shiftId === 'rest' ? ' rest' : '';
             const blockClass = mode === 'block' ? ' blocked' : '';
+            const key = assignmentKey(dateKey, shiftId, personId);
+            const isCalendarLock = mode === 'work' && state.lockOrigins[key] === 'calendar';
+            if (isCalendarLock) {
+                return `<span class="fixed-tag${restClass}${blockClass}" title="请在日历排班标签中删除">${label}（日历固定）</span>`;
+            }
             return `
                 <span class="fixed-tag${restClass}${blockClass}" draggable="true" data-fixed-tag data-person="${personId}" data-date="${dateKey}" data-shift="${shiftId}" data-mode="${mode}">
                     ${label}
@@ -1721,6 +1755,14 @@
         }
 
         function togglePreferenceDate(personId, dateKey) {
+            const calendarLock = shifts.some((shift) => {
+                const key = assignmentKey(dateKey, shift.id, personId);
+                return state.locked[key] && state.lockOrigins[key] === 'calendar';
+            });
+            if (calendarLock) {
+                showToast('该日期已有日历固定班次，请先在日历排班标签中删除');
+                return;
+            }
             const shiftId = getPreferenceShift(personId);
             const mode = getPreferenceMode(personId);
             const rule = getRule(personId, dateKey);
@@ -1744,6 +1786,14 @@
         }
 
         function movePreference(source, targetDateKey, targetShiftId) {
+            const targetCalendarLock = shifts.some((shift) => {
+                const key = assignmentKey(targetDateKey, shift.id, source.personId);
+                return state.locked[key] && state.lockOrigins[key] === 'calendar';
+            });
+            if (targetCalendarLock) {
+                showToast('目标日期已有日历固定班次，请先在日历排班标签中删除');
+                return;
+            }
             if (source.personId !== state.selectedPersonId) {
                 state.selectedPersonId = source.personId;
             }
@@ -1766,7 +1816,7 @@
             removePersonFromDate(personId, dateKey);
         }
 
-        function setFixedShift(personId, dateKey, shiftId) {
+        function setFixedShift(personId, dateKey, shiftId, origin = 'preference') {
             const rule = getRule(personId, dateKey);
             rule.vacation = false;
             if (shiftId === 'all') {
@@ -1782,7 +1832,9 @@
             rule.allow.add(shiftId);
             removePersonFromDate(personId, dateKey);
             getAssignment(dateKey, shiftId).push(personId);
-            state.locked[assignmentKey(dateKey, shiftId, personId)] = true;
+            const key = assignmentKey(dateKey, shiftId, personId);
+            state.locked[key] = true;
+            state.lockOrigins[key] = origin;
         }
 
         function setBlockedShift(personId, dateKey, shiftId) {
@@ -1800,7 +1852,9 @@
             rule.block.add(shiftId);
             state.assignments[dateKey] ||= {};
             state.assignments[dateKey][shiftId] = (state.assignments[dateKey][shiftId] || []).filter((id) => id !== personId);
-            delete state.locked[assignmentKey(dateKey, shiftId, personId)];
+            const key = assignmentKey(dateKey, shiftId, personId);
+            delete state.locked[key];
+            delete state.lockOrigins[key];
         }
 
         function removePreference(personId, dateKey, shiftId, mode = 'work') {
@@ -1816,7 +1870,9 @@
                 if (shiftId !== 'all') {
                     state.assignments[dateKey] ||= {};
                     state.assignments[dateKey][shiftId] = (state.assignments[dateKey][shiftId] || []).filter((id) => id !== personId);
-                    delete state.locked[assignmentKey(dateKey, shiftId, personId)];
+                    const key = assignmentKey(dateKey, shiftId, personId);
+                    delete state.locked[key];
+                    delete state.lockOrigins[key];
                 }
             }
         }
@@ -1829,7 +1885,9 @@
             state.assignments[dateKey] ||= {};
             state.assignments[dateKey][shiftId] = (state.assignments[dateKey][shiftId] || [])
                 .filter((id) => id !== personId);
-            delete state.locked[assignmentKey(dateKey, shiftId, personId)];
+            const key = assignmentKey(dateKey, shiftId, personId);
+            delete state.locked[key];
+            delete state.lockOrigins[key];
             getRule(personId, dateKey).allow.delete(shiftId);
         }
 
@@ -1840,33 +1898,35 @@
             const shiftId = anchor.dataset.shift;
             const key = assignmentKey(dateKey, shiftId, personId);
             const isLocked = Boolean(state.locked[key]);
+            const lockOrigin = state.lockOrigins[key] || 'preference';
             const menu = document.createElement('div');
             menu.className = 'assignment-action-menu';
-            menu.innerHTML = `
-                <button class="assignment-action" type="button" data-assignment-lock-action>
-                    ${isLocked ? '取消固定' : '固定'}
-                </button>
-                <button class="assignment-action delete" type="button" data-assignment-delete-action>删除</button>
-            `;
-
-            menu.querySelector('[data-assignment-lock-action]').addEventListener('click', (event) => {
-                event.stopPropagation();
-                if (isLocked) {
-                    delete state.locked[key];
-                    getRule(personId, dateKey).allow.delete(shiftId);
-                    showToast('已取消固定，保留当前排班');
-                } else {
-                    setFixedShift(personId, dateKey, shiftId);
+            if (isLocked && lockOrigin === 'preference') {
+                menu.innerHTML = '<button class="assignment-action" type="button" data-preference-lock-note>请到人员固定班次中修改</button>';
+                menu.querySelector('[data-preference-lock-note]').addEventListener('click', () => {
+                    closeAssignmentActionMenu();
+                    showToast('此排班来自人员固定班次，请回到人员卡片修改');
+                });
+            } else if (isLocked) {
+                menu.innerHTML = '<button class="assignment-action delete" type="button" data-assignment-delete-action>删除固定班次</button>';
+            } else {
+                menu.innerHTML = `
+                    <button class="assignment-action" type="button" data-assignment-lock-action>固定</button>
+                    <button class="assignment-action delete" type="button" data-assignment-delete-action>删除</button>
+                `;
+                menu.querySelector('[data-assignment-lock-action]').addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    setFixedShift(personId, dateKey, shiftId, 'calendar');
                     showToast('已固定该排班');
-                }
-                closeAssignmentActionMenu();
-                refreshPeopleAndCalendar();
-            });
+                    closeAssignmentActionMenu();
+                    refreshPeopleAndCalendar();
+                });
+            }
 
-            menu.querySelector('[data-assignment-delete-action]').addEventListener('click', (event) => {
+            menu.querySelector('[data-assignment-delete-action]')?.addEventListener('click', (event) => {
                 event.stopPropagation();
                 deleteAssignment(personId, dateKey, shiftId);
-                showToast('已删除该排班');
+                showToast(isLocked ? '已删除固定班次' : '已删除该排班');
                 closeAssignmentActionMenu();
                 refreshPeopleAndCalendar();
             });
@@ -1919,17 +1979,12 @@
             });
             calendarWrap.querySelectorAll('[data-block]').forEach((item) => {
                 item.addEventListener('click', () => {
-                    removePreference(item.dataset.person, item.dataset.date, item.dataset.shift, 'block');
-                    showToast('已删除固定不上');
-                    refreshPeopleAndCalendar();
+                    showToast('固定不上只能在人员固定班次中修改');
                 });
             });
             calendarWrap.querySelectorAll('[data-day-rule]').forEach((item) => {
                 item.addEventListener('click', () => {
-                    const shiftId = item.dataset.mode === 'rest' ? 'rest' : 'all';
-                    removePreference(item.dataset.person, item.dataset.date, shiftId, item.dataset.mode);
-                    showToast(item.dataset.mode === 'rest' ? '已删除休假' : '已删除全天固定');
-                    refreshPeopleAndCalendar();
+                    showToast('该固定规则只能在人员固定班次中修改');
                 });
             });
         }
@@ -2025,8 +2080,19 @@
             const dateKey = cell.dataset.date;
             const rowId = cell.dataset.rowId;
             const cellType = cell.dataset.cellType;
+            if (cellType === 'person') {
+                const reason = getManualEditBlockReason(rowId, dateKey);
+                if (reason) {
+                    showToast(reason);
+                    return;
+                }
+            }
             const options = cellType === 'shift'
-                ? state.people.map((person) => ({ id: person.id, label: person.name }))
+                ? state.people.map((person) => ({
+                    id: person.id,
+                    label: person.name,
+                    blockedReason: getManualEditBlockReason(person.id, dateKey),
+                }))
                 : shifts.map((shift) => ({ id: shift.id, label: `${shift.name}班` }));
             const title = cellType === 'shift' ? '选择排班人员' : '选择分配班次';
 
@@ -2041,7 +2107,12 @@
             menu.innerHTML = `
                 <div class="manual-menu-title">${title}</div>
                 <div class="manual-option-list">
-                    ${options.map((option) => `<button class="manual-option" type="button" data-option-id="${option.id}">${option.label}</button>`).join('')}
+                    ${options.map((option) => `
+                        <button class="manual-option" type="button" data-option-id="${option.id}"
+                            ${option.blockedReason ? `disabled title="${escapeHtml(option.blockedReason)}"` : ''}>
+                            ${option.label}${option.blockedReason ? '（已固定）' : ''}
+                        </button>
+                    `).join('')}
                 </div>
             `;
 
@@ -2052,10 +2123,11 @@
 
             menu.querySelectorAll('[data-option-id]').forEach((button) => {
                 button.addEventListener('click', () => {
+                    if (button.disabled) return;
                     if (cellType === 'shift') {
-                        setFixedShift(button.dataset.optionId, dateKey, rowId);
+                        setFixedShift(button.dataset.optionId, dateKey, rowId, 'calendar');
                     } else {
-                        setFixedShift(rowId, dateKey, button.dataset.optionId);
+                        setFixedShift(rowId, dateKey, button.dataset.optionId, 'calendar');
                     }
                     closeManualMenu();
                     showToast('已手动固定排班');
@@ -2136,7 +2208,9 @@
             shifts.forEach((shift) => {
                 state.assignments[dateKey] ||= {};
                 state.assignments[dateKey][shift.id] = (state.assignments[dateKey][shift.id] || []).filter((id) => id !== personId);
-                delete state.locked[assignmentKey(dateKey, shift.id, personId)];
+                const key = assignmentKey(dateKey, shift.id, personId);
+                delete state.locked[key];
+                delete state.lockOrigins[key];
             });
         }
 
@@ -3297,7 +3371,12 @@
                     assignments: cloneAssignments(state.assignments),
                     locked: Object.keys(state.locked).filter((key) => state.locked[key]).map((key) => {
                         const [dateKey, shiftId, personId] = key.split('|');
-                        return { dateKey, shiftId, personId };
+                        return {
+                            dateKey,
+                            shiftId,
+                            personId,
+                            origin: state.lockOrigins[key] === 'calendar' ? 'calendar' : 'preference',
+                        };
                     }),
                     solutions: state.solutions.map((solution) => ({
                         assignments: cloneAssignments(solution.assignments),
@@ -3457,6 +3536,7 @@
                 dateKeys,
             );
             const locked = {};
+            const lockOrigins = {};
             (Array.isArray(archive.schedule?.locked) ? archive.schedule.locked : []).forEach((item) => {
                 if (
                     validPeople.has(item.personId)
@@ -3464,7 +3544,9 @@
                     && shifts.some((shift) => shift.id === item.shiftId)
                     && assignments[item.dateKey]?.[item.shiftId]?.includes(item.personId)
                 ) {
-                    locked[assignmentKey(item.dateKey, item.shiftId, item.personId)] = true;
+                    const key = assignmentKey(item.dateKey, item.shiftId, item.personId);
+                    locked[key] = true;
+                    lockOrigins[key] = item.origin === 'calendar' ? 'calendar' : 'preference';
                 }
             });
 
@@ -3510,6 +3592,7 @@
                 rules,
                 assignments,
                 locked,
+                lockOrigins,
                 solutions,
                 activeSolutionIndex: Number.isInteger(archive.schedule?.activeSolutionIndex)
                     ? archive.schedule.activeSolutionIndex
@@ -3614,6 +3697,7 @@
                 state.rules = imported.rules;
                 state.assignments = imported.assignments;
                 state.locked = imported.locked;
+                state.lockOrigins = imported.lockOrigins;
                 state.solutions = imported.solutions;
                 state.activeSolutionIndex = imported.solutions.length
                     ? Math.max(-1, Math.min(imported.activeSolutionIndex, imported.solutions.length - 1))
@@ -3705,6 +3789,7 @@
         document.getElementById('solveBtn').addEventListener('click', solveSchedules);
         document.getElementById('clearBtn').addEventListener('click', () => {
             state.locked = {};
+            state.lockOrigins = {};
             clearAssignments(false);
             showToast('已清空排班');
         });
