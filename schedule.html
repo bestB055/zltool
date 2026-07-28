@@ -1620,7 +1620,8 @@
         }
 
         function renderRange() {
-            rangeText.textContent = `默认周期：${dates[0].full} 至 ${dates[dates.length - 1].full}。满勤 ${getRequiredAttendanceDays()} 天（${getRequiredAttendanceHours()} 小时），工作日至少 ${schedulePolicy.weekdayMinimum} 人，周末至少 ${schedulePolicy.weekendMinimum} 人，周一/周三至少 ${schedulePolicy.specialMinimum} 人；每人最多多排 ${schedulePolicy.maximumExtraDays} 天。`;
+            rangeText.textContent = `默认周期：${dates[0].full} 至 ${dates[dates.length - 1].full}，满勤 ${getRequiredAttendanceDays()} 天。`;
+            // （${getRequiredAttendanceHours()} 小时），工作日至少 ${schedulePolicy.weekdayMinimum} 人，周末至少 ${schedulePolicy.weekendMinimum} 人，周一/周三至少 ${schedulePolicy.specialMinimum} 人；每人最多多排 ${schedulePolicy.maximumExtraDays} 天。`
         }
 
         function getDateConfig(dateKey) {
