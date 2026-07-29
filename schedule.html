@@ -170,6 +170,136 @@
             color: var(--primary-dark);
         }
 
+        .staffing-panel {
+            margin-bottom: 18px;
+        }
+
+        .staffing-grid {
+            display: grid;
+            grid-template-columns: minmax(220px, 0.75fr) minmax(0, 2fr);
+            gap: 18px;
+        }
+
+        .staffing-section {
+            display: grid;
+            align-content: start;
+            gap: 12px;
+            padding: 16px;
+            border: 1px solid rgba(36, 107, 254, 0.1);
+            border-radius: 16px;
+            background: rgba(36, 107, 254, 0.04);
+        }
+
+        .staffing-section-title {
+            font-size: 0.92rem;
+            font-weight: 900;
+        }
+
+        .staffing-fields {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(100px, 1fr));
+            gap: 10px;
+        }
+
+        .staffing-field {
+            display: grid;
+            gap: 6px;
+        }
+
+        .staffing-field label {
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-weight: 800;
+        }
+
+        .staffing-input,
+        .staffing-select {
+            width: 100%;
+            min-height: 38px;
+            padding: 0 10px;
+            border: 1px solid rgba(36, 107, 254, 0.16);
+            border-radius: 10px;
+            background: #fff;
+            color: var(--text);
+            outline: none;
+        }
+
+        .staffing-input:focus,
+        .staffing-select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(36, 107, 254, 0.1);
+        }
+
+        .strategy-editor {
+            display: grid;
+            grid-template-columns: minmax(140px, 1fr) minmax(180px, 1.5fr) repeat(2, minmax(90px, 0.7fr)) auto;
+            gap: 10px;
+            align-items: end;
+        }
+
+        .strategy-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .strategy-empty {
+            padding: 12px;
+            border: 1px dashed rgba(36, 107, 254, 0.2);
+            border-radius: 12px;
+            color: var(--muted);
+            font-size: 0.82rem;
+            text-align: center;
+        }
+
+        .strategy-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border: 1px solid rgba(36, 107, 254, 0.1);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.82);
+        }
+
+        .strategy-item.disabled {
+            opacity: 0.55;
+        }
+
+        .strategy-copy {
+            min-width: 0;
+            color: var(--muted);
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+
+        .strategy-copy strong {
+            display: block;
+            color: var(--text);
+            font-size: 0.86rem;
+        }
+
+        .strategy-actions {
+            display: flex;
+            flex: 0 0 auto;
+            gap: 6px;
+        }
+
+        .strategy-action {
+            min-height: 30px;
+            padding: 0 9px;
+            border: 1px solid rgba(36, 107, 254, 0.12);
+            border-radius: 9px;
+            background: #fff;
+            color: var(--primary-dark);
+            font-size: 0.76rem;
+            font-weight: 800;
+        }
+
+        .strategy-action.delete {
+            color: var(--red);
+        }
+
         .layout {
             display: grid;
             grid-template-columns: minmax(0, 1fr);
@@ -1133,6 +1263,11 @@
                 grid-template-columns: 1fr;
             }
 
+            .staffing-grid,
+            .strategy-editor {
+                grid-template-columns: 1fr 1fr;
+            }
+
             .toolbar {
                 justify-content: flex-start;
             }
@@ -1151,6 +1286,12 @@
             .panel-header {
                 align-items: stretch;
                 flex-direction: column;
+            }
+
+            .staffing-grid,
+            .staffing-fields,
+            .strategy-editor {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -1171,6 +1312,67 @@
             <div class="toolbar">
                 <button class="btn primary" type="button" id="solveBtn">自动排班</button>
                 <button class="btn ghost" type="button" id="clearBtn">清空排班</button>
+            </div>
+        </section>
+
+        <section class="panel staffing-panel">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">人力策略</h2>
+                    <p class="muted">设置每日早晚班最低人数；特殊策略按增量叠加，同一天可命中多个策略组。</p>
+                </div>
+            </div>
+            <div class="panel-body">
+                <div class="staffing-grid">
+                    <div class="staffing-section">
+                        <h3 class="staffing-section-title">每日默认人数</h3>
+                        <div class="staffing-fields">
+                            <div class="staffing-field">
+                                <label for="baseMorningInput">早班人数</label>
+                                <input class="staffing-input" id="baseMorningInput" type="number" min="0" max="300" step="1">
+                            </div>
+                            <div class="staffing-field">
+                                <label for="baseNightInput">晚班人数</label>
+                                <input class="staffing-input" id="baseNightInput" type="number" min="0" max="300" step="1">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="staffing-section">
+                        <h3 class="staffing-section-title">特殊日期策略组</h3>
+                        <div class="strategy-editor">
+                            <div class="staffing-field">
+                                <label for="strategyTypeSelect">匹配方式</label>
+                                <select class="staffing-select" id="strategyTypeSelect">
+                                    <option value="dates">指定日期</option>
+                                    <option value="weekday">每周星期</option>
+                                </select>
+                            </div>
+                            <div class="staffing-field">
+                                <label for="strategyTargetInput" id="strategyTargetLabel">日期（多个用逗号分隔）</label>
+                                <input class="staffing-input" id="strategyTargetInput" type="text" placeholder="如 2026-08-01, 2026-08-08">
+                                <select class="staffing-select" id="strategyWeekdaySelect" hidden>
+                                    <option value="1">每周一</option>
+                                    <option value="2">每周二</option>
+                                    <option value="3">每周三</option>
+                                    <option value="4">每周四</option>
+                                    <option value="5">每周五</option>
+                                    <option value="6">每周六</option>
+                                    <option value="0">每周日</option>
+                                </select>
+                            </div>
+                            <div class="staffing-field">
+                                <label for="strategyMorningDelta">早班增加</label>
+                                <input class="staffing-input" id="strategyMorningDelta" type="number" min="0" max="300" step="1" value="0">
+                            </div>
+                            <div class="staffing-field">
+                                <label for="strategyNightDelta">晚班增加</label>
+                                <input class="staffing-input" id="strategyNightDelta" type="number" min="0" max="300" step="1" value="0">
+                            </div>
+                            <button class="btn primary" type="button" id="addStrategyBtn">保存策略组</button>
+                        </div>
+                        <div class="strategy-list" id="strategyList"></div>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -1245,6 +1447,7 @@
             weekendMinimum: 6,
             specialWeekdays: [1, 3],
             specialMinimum: 8,
+            minimumMorning: 3,
             minimumNight: 3,
             hoursPerDay: 8,
             maximumExtraDays: 2,
@@ -1255,7 +1458,7 @@
         const DEPLOYMENT_CONFIG = window.DAIBAN_HOME_CONFIG || {};
         const CONFIGURED_DEEPSEEK_API_KEY = normalizeApiKey(DEPLOYMENT_CONFIG.DEEPSEEK_API_KEY || '');
         const AI_SOLUTION_COUNT = 3;
-        const SCHEDULE_RULES_URL = '排班提示.txt?v=20260727-2';
+        const SCHEDULE_RULES_URL = '排班提示.txt?v=20260729-2';
         const MAX_ARCHIVE_FILE_SIZE = 20 * 1024 * 1024;
         const MAX_ARCHIVE_PEOPLE = 300;
         const MAX_ARCHIVE_DATES = 62;
@@ -1267,6 +1470,11 @@
             preferenceShifts: {},
             preferenceModes: {},
             shiftPreferences: {},
+            staffing: {
+                baseMorning: schedulePolicy.minimumMorning,
+                baseNight: schedulePolicy.minimumNight,
+                strategies: [],
+            },
             people: [
                 { id: 'p1', name: '迪加' },
                 { id: 'p2', name: '爱林' },
@@ -1276,11 +1484,11 @@
                 { id: 'p6', name: '思梦' },
                 { id: 'p7', name: '少聪' },
                 { id: 'p8', name: '李洵' },
-                { id: 'p9', name: '何箫然' },
-                { id: 'p10', name: '罗明月' },
-                { id: 'p11', name: '倪雪莹' },
-                { id: 'p12', name: '谢廖沙' },
-                { id: 'p13', name: '张婉凝' },
+                { id: 'p9', name: '箫然' },
+                { id: 'p10', name: '明月' },
+                { id: 'p11', name: '雪莹' },
+                { id: 'p12', name: '廖沙' },
+                { id: 'p13', name: '婉凝' },
             ],
             rules: {},
             assignments: {},
@@ -1303,6 +1511,15 @@
         const importArchiveBtn = document.getElementById('importArchiveBtn');
         const solveBtn = document.getElementById('solveBtn');
         const aiSolveStatus = document.getElementById('aiSolveStatus');
+        const baseMorningInput = document.getElementById('baseMorningInput');
+        const baseNightInput = document.getElementById('baseNightInput');
+        const strategyTypeSelect = document.getElementById('strategyTypeSelect');
+        const strategyTargetLabel = document.getElementById('strategyTargetLabel');
+        const strategyTargetInput = document.getElementById('strategyTargetInput');
+        const strategyWeekdaySelect = document.getElementById('strategyWeekdaySelect');
+        const strategyMorningDelta = document.getElementById('strategyMorningDelta');
+        const strategyNightDelta = document.getElementById('strategyNightDelta');
+        const strategyList = document.getElementById('strategyList');
         let toastTimer = null;
         let archiveExtensions = {};
         let scheduleRewardRules = '';
@@ -1619,9 +1836,136 @@
             return '';
         }
 
+        function normalizeStaffingNumber(value, fallback = 0) {
+            const number = Number(value);
+            return Number.isInteger(number) && number >= 0
+                ? Math.min(number, MAX_ARCHIVE_PEOPLE)
+                : fallback;
+        }
+
+        function invalidateSolutionsForStaffingChange() {
+            state.solutions = [];
+            state.activeSolutionIndex = -1;
+            state.diagnostics.lastSolve = null;
+            setAiSolveStatus('');
+            renderRange();
+            renderCalendar();
+            renderSolutions();
+        }
+
+        function strategyMatchesDate(strategy, date) {
+            if (!strategy.enabled) {
+                return false;
+            }
+            return strategy.type === 'weekday'
+                ? strategy.weekdays.includes(date.dayIndex)
+                : strategy.dates.includes(date.key);
+        }
+
+        function getStaffingAdjustments(date) {
+            return state.staffing.strategies.reduce((result, strategy) => {
+                if (strategyMatchesDate(strategy, date)) {
+                    result.morning += strategy.morningDelta;
+                    result.night += strategy.nightDelta;
+                    result.total += strategy.morningDelta + strategy.nightDelta;
+                    result.strategyIds.push(strategy.id);
+                }
+                return result;
+            }, { morning: 0, night: 0, total: 0, strategyIds: [] });
+        }
+
+        function getStrategyTargetText(strategy) {
+            if (strategy.type === 'weekday') {
+                const weekdayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+                return strategy.weekdays.map((dayIndex) => weekdayNames[dayIndex]).join('、');
+            }
+            return strategy.dates.join('、');
+        }
+
+        function renderStaffingControls() {
+            baseMorningInput.value = state.staffing.baseMorning;
+            baseNightInput.value = state.staffing.baseNight;
+            strategyList.innerHTML = state.staffing.strategies.length
+                ? state.staffing.strategies.map((strategy) => `
+                    <div class="strategy-item${strategy.enabled ? '' : ' disabled'}">
+                        <div class="strategy-copy">
+                            <strong>${escapeHtml(strategy.name)}</strong>
+                            ${escapeHtml(getStrategyTargetText(strategy))}：
+                            早班 +${strategy.morningDelta}，晚班 +${strategy.nightDelta}
+                        </div>
+                        <div class="strategy-actions">
+                            <button class="strategy-action" type="button" data-toggle-strategy="${strategy.id}">
+                                ${strategy.enabled ? '停用' : '启用'}
+                            </button>
+                            <button class="strategy-action delete" type="button" data-delete-strategy="${strategy.id}">删除</button>
+                        </div>
+                    </div>
+                `).join('')
+                : '<div class="strategy-empty">暂无特殊策略组</div>';
+        }
+
+        function syncStrategyEditorType() {
+            const usesWeekday = strategyTypeSelect.value === 'weekday';
+            strategyTargetInput.hidden = usesWeekday;
+            strategyWeekdaySelect.hidden = !usesWeekday;
+            strategyTargetLabel.textContent = usesWeekday ? '星期' : '日期（多个用逗号分隔）';
+        }
+
+        function parseStrategyDates(value) {
+            const cycleDates = new Set(dates.map((date) => date.key));
+            const values = [...new Set(sanitizeText(value).split(/[\s,，;；]+/).filter(Boolean))];
+            if (!values.length) {
+                throw new Error('请至少填写一个日期');
+            }
+            values.forEach((dateKey) => {
+                buildDateFromKey(dateKey);
+                if (!cycleDates.has(dateKey)) {
+                    throw new Error(`${dateKey} 不在当前排班周期内`);
+                }
+            });
+            return values.sort();
+        }
+
+        function addStaffingStrategy() {
+            const type = strategyTypeSelect.value === 'weekday' ? 'weekday' : 'dates';
+            const morningDelta = normalizeStaffingNumber(strategyMorningDelta.value, -1);
+            const nightDelta = normalizeStaffingNumber(strategyNightDelta.value, -1);
+            if (morningDelta < 0 || nightDelta < 0) {
+                showToast('增加人数必须是非负整数');
+                return;
+            }
+            if (morningDelta + nightDelta === 0) {
+                showToast('早班或晚班至少增加 1 人');
+                return;
+            }
+            try {
+                const strategy = {
+                    id: `staff-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                    name: '',
+                    type,
+                    dates: type === 'dates' ? parseStrategyDates(strategyTargetInput.value) : [],
+                    weekdays: type === 'weekday' ? [Number(strategyWeekdaySelect.value)] : [],
+                    morningDelta,
+                    nightDelta,
+                    enabled: true,
+                };
+                strategy.name = type === 'weekday'
+                    ? `${getStrategyTargetText(strategy)}人力策略`
+                    : `${strategy.dates.length}个指定日期人力策略`;
+                state.staffing.strategies.push(strategy);
+                strategyTargetInput.value = '';
+                strategyMorningDelta.value = '0';
+                strategyNightDelta.value = '0';
+                renderStaffingControls();
+                invalidateSolutionsForStaffingChange();
+                showToast('人力策略组已保存');
+            } catch (error) {
+                showToast(error.message);
+            }
+        }
+
         function renderRange() {
-            rangeText.textContent = `默认周期：${dates[0].full} 至 ${dates[dates.length - 1].full}，满勤 ${getRequiredAttendanceDays()} 天。`;
-            // （${getRequiredAttendanceHours()} 小时），工作日至少 ${schedulePolicy.weekdayMinimum} 人，周末至少 ${schedulePolicy.weekendMinimum} 人，周一/周三至少 ${schedulePolicy.specialMinimum} 人；每人最多多排 ${schedulePolicy.maximumExtraDays} 天。`
+            rangeText.textContent = `默认周期：${dates[0].full} 至 ${dates[dates.length - 1].full}，满勤 ${getRequiredAttendanceDays()} 天；每日早班至少 ${state.staffing.baseMorning} 人、晚班至少 ${state.staffing.baseNight} 人。`;
         }
 
         function getDateConfig(dateKey) {
@@ -1629,13 +1973,19 @@
             const dayIndex = date?.dayIndex;
             const isWeekend = dayIndex === 0 || dayIndex === 6;
             const isSpecial = schedulePolicy.specialWeekdays.includes(dayIndex);
+            const adjustments = getStaffingAdjustments(date);
+            const baseRequired = isSpecial
+                ? schedulePolicy.specialMinimum
+                : isWeekend
+                    ? schedulePolicy.weekendMinimum
+                    : schedulePolicy.weekdayMinimum;
+            const minimumMorning = state.staffing.baseMorning + adjustments.morning;
+            const minimumNight = state.staffing.baseNight + adjustments.night;
             return {
-                required: isSpecial
-                    ? schedulePolicy.specialMinimum
-                    : isWeekend
-                        ? schedulePolicy.weekendMinimum
-                        : schedulePolicy.weekdayMinimum,
-                minimumNight: schedulePolicy.minimumNight,
+                required: Math.max(baseRequired + adjustments.total, minimumMorning + minimumNight),
+                minimumMorning,
+                minimumNight,
+                appliedStrategyIds: adjustments.strategyIds,
             };
         }
 
@@ -2019,6 +2369,7 @@
         }
 
         function renderDateHeader(date) {
+            const staffing = getDateConfig(date.key);
             const rules = state.people.flatMap((person) => {
                 const rule = getRule(person.id, date.key);
                 const items = [];
@@ -2038,6 +2389,7 @@
                 <span class="date-head">
                     <strong>${date.label}</strong>
                     <span class="weekday">周${date.weekday}</span>
+                    <span class="weekday">需 早${staffing.minimumMorning} / 晚${staffing.minimumNight} / 总${staffing.required}</span>
                     ${rules ? `<span class="date-rule-list">${rules}</span>` : ''}
                 </span>
             `;
@@ -2176,7 +2528,7 @@
                         <div>
                             <strong>${escapeHtml(solution.name || `方案 ${index + 1}`)}</strong>
                             <span class="solution-source${solution.source === 'ai' ? ' ai' : ''}">${solution.source === 'ai' ? 'AI' : '本地'}</span>
-                            <p class="muted">共 ${solution.filled} 个在班坑位，满勤目标 ${getRequiredAttendanceDays()} 天，排班+带薪休假 ${solution.minAttendanceDays}-${solution.maxAttendanceDays} 天，额外出勤 ${solution.minExtraDays}-${solution.maxExtraDays} 天，评分 ${solution.score}${solution.softViolations?.length ? `，软约束偏差 ${solution.softViolations.length} 项` : ''}</p>
+                            <p class="muted">共 ${solution.filled} 个在班坑位，满勤目标 ${getRequiredAttendanceDays()} 天，排班+带薪休假 ${solution.minAttendanceDays}-${solution.maxAttendanceDays} 天，额外出勤 ${solution.minExtraDays}-${solution.maxExtraDays} 天，评分 ${solution.score}，个人得分方差 ${Number(solution.personalScoreVariance || 0).toFixed(2)}${solution.softViolations?.length ? `，软约束偏差 ${solution.softViolations.length} 项` : ''}</p>
                             ${solution.summary ? `<p class="muted">${escapeHtml(solution.summary)}</p>` : ''}
                         </div>
                         <button class="btn ghost" type="button" data-solution-index="${index}">查看</button>
@@ -2348,10 +2700,17 @@
             const extraLoads = attendanceLoads.map((attendanceDays) =>
                 Math.max(0, attendanceDays - getRequiredAttendanceDays())
             );
+            const personalScoreStats = getPersonalScoreStats(assignments);
             return {
                 assignments: cloneAssignments(assignments),
                 filled: countAssignedSlots(assignments),
                 score: Math.round(scoreSchedule(assignments)),
+                personalScoreAverage: Number(personalScoreStats.average.toFixed(2)),
+                personalScoreVariance: Number(personalScoreStats.variance.toFixed(2)),
+                personalScores: personalScoreStats.scores.map((item) => ({
+                    ...item,
+                    score: Number(item.score.toFixed(2)),
+                })),
                 minAttendanceDays: Math.min(...attendanceLoads),
                 maxAttendanceDays: Math.max(...attendanceLoads),
                 minExtraDays: Math.min(...extraLoads),
@@ -2365,7 +2724,7 @@
 
         function buildAiScheduleInput(localSolutions, acceptedSolutions = [], repair = null) {
             return {
-                schemaVersion: '1.1.0',
+                schemaVersion: '1.2.0',
                 task: 'generate_schedule_candidates',
                 requestedSolutionCount: 1,
                 period: {
@@ -2373,7 +2732,9 @@
                         key: date.key,
                         weekday: date.weekday,
                         required: getDateConfig(date.key).required,
+                        minimumMorning: getDateConfig(date.key).minimumMorning,
                         minimumNight: getDateConfig(date.key).minimumNight,
+                        appliedStrategyIds: getDateConfig(date.key).appliedStrategyIds,
                     })),
                 },
                 shifts: shifts.map((shift) => ({ ...shift })),
@@ -2388,9 +2749,25 @@
                 policy: {
                     ...schedulePolicy,
                     specialWeekdays: [...schedulePolicy.specialWeekdays],
+                    staffing: {
+                        baseMorning: state.staffing.baseMorning,
+                        baseNight: state.staffing.baseNight,
+                        strategies: state.staffing.strategies.map((strategy) => ({
+                            ...strategy,
+                            dates: [...strategy.dates],
+                            weekdays: [...strategy.weekdays],
+                        })),
+                    },
+                    fairness: {
+                        metric: 'variance_of_personal_schedule_scores',
+                        variancePenaltyWeight: 0.5,
+                        goal: 'minimize',
+                    },
                 },
                 baselineSolutions: localSolutions.slice(0, 3).map((solution) => ({
                     score: solution.score,
+                    personalScoreVariance: solution.personalScoreVariance,
+                    personalScores: solution.personalScores,
                     assignments: solution.assignments,
                     softViolations: solution.softViolations,
                 })),
@@ -2427,6 +2804,8 @@
             const baseSystemPrompt = [
                 '你是排班优化专家。请根据输入 JSON 生成一个合法且完整的排班候选。',
                 '必须严格遵守奖励规则中的全部硬性规则，并优化奖励分。',
+                '每个日期必须达到输入 period.dates 中的 required、minimumMorning、minimumNight；这些值已经合并默认人数与全部命中的特殊人力策略。',
+                '必须兼顾每个人的满勤、连续工作段、班次偏好、早晚班均衡和班次切换；优先降低所有人个人排班得分的方差，不能只提高少数人的体验。',
                 '必须返回 JSON 对象，根字段必须为 solutions，不要返回 Markdown 或解释文字。',
                 'JSON 必须紧凑且语法完整，所有字符串使用英文双引号，禁止尾逗号、注释或省略日期。',
                 '每个日期必须包含 morning、normal、night 三个数组，只能使用输入中的人员 ID。',
@@ -2672,11 +3051,17 @@
                 const availablePeople = state.people.filter((person) =>
                     shifts.some((shift) => canUseShiftByRule(person.id, date.key, shift.id))
                 ).length;
+                const availableMorningPeople = state.people.filter((person) =>
+                    canUseShiftByRule(person.id, date.key, 'morning')
+                ).length;
                 const availableNightPeople = state.people.filter((person) =>
                     canUseShiftByRule(person.id, date.key, 'night')
                 ).length;
                 if (availablePeople < config.required) {
                     blocking.push(`${date.key} 可用人员 ${availablePeople} 人，不足最低需求 ${config.required} 人`);
+                }
+                if (availableMorningPeople < config.minimumMorning) {
+                    blocking.push(`${date.key} 可排早班人员 ${availableMorningPeople} 人，不足早班最低 ${config.minimumMorning} 人`);
                 }
                 if (availableNightPeople < config.minimumNight) {
                     blocking.push(`${date.key} 可排晚班人员 ${availableNightPeople} 人，不足晚班最低 ${config.minimumNight} 人`);
@@ -2794,10 +3179,17 @@
             const extraLoads = attendanceLoads.map((attendanceDays) =>
                 Math.max(0, attendanceDays - getRequiredAttendanceDays())
             );
+            const personalScoreStats = getPersonalScoreStats(assignments);
             return {
                 assignments,
                 filled: countAssignedSlots(assignments),
                 score: Math.round(score),
+                personalScoreAverage: Number(personalScoreStats.average.toFixed(2)),
+                personalScoreVariance: Number(personalScoreStats.variance.toFixed(2)),
+                personalScores: personalScoreStats.scores.map((item) => ({
+                    ...item,
+                    score: Number(item.score.toFixed(2)),
+                })),
                 minAttendanceDays: Math.min(...attendanceLoads),
                 maxAttendanceDays: Math.max(...attendanceLoads),
                 minExtraDays: Math.min(...extraLoads),
@@ -2847,10 +3239,12 @@
             const targetTotal = Math.max(config.required, lockedTotal);
             const options = [];
 
-            for (let night = config.minimumNight; night <= targetTotal; night += 1) {
+            for (let night = config.minimumNight; night <= targetTotal - config.minimumMorning; night += 1) {
                 for (let normal = 0; normal <= targetTotal - night; normal += 1) {
                     const morning = targetTotal - night - normal;
-                    options.push({ morning, normal, night });
+                    if (morning >= config.minimumMorning) {
+                        options.push({ morning, normal, night });
+                    }
                 }
             }
 
@@ -2863,6 +3257,9 @@
             }
 
             const fallback = { ...lockedCounts };
+            while (fallback.morning < config.minimumMorning) {
+                fallback.morning += 1;
+            }
             while (fallback.night < config.minimumNight) {
                 fallback.night += 1;
             }
@@ -3050,9 +3447,13 @@
                     (total, shift) => total + (assignments[date.key]?.[shift.id]?.length || 0),
                     0,
                 );
+                const morning = assignments[date.key]?.morning?.length || 0;
                 const night = assignments[date.key]?.night?.length || 0;
                 if (assigned < config.required) {
                     violations.push(`${date.key} 在岗人数不足 ${config.required - assigned} 人`);
+                }
+                if (morning < config.minimumMorning) {
+                    violations.push(`${date.key} 早班人数不足 ${config.minimumMorning - morning} 人`);
                 }
                 if (night < config.minimumNight) {
                     violations.push(`${date.key} 晚班人数不足 ${config.minimumNight - night} 人`);
@@ -3303,52 +3704,73 @@
             return shifts.find((shift) => assignments[dateKey]?.[shift.id]?.includes(personId))?.id || '';
         }
 
-        function scoreSchedule(assignments) {
+        function getPersonScheduleScore(assignments, personId, averageLoad) {
             let score = 0;
+            const workDays = getWorkDays(assignments, personId);
+            const targets = getPersonWorkloadTargets(personId);
+            const attendanceDays = workDays + targets.paidLeaveDays;
+            score -= Math.abs(attendanceDays - targets.targetAttendanceDays) * 5;
+
+            getWorkSegments(assignments, personId).forEach((segment) => {
+                if (segment.length >= 3 && segment.length <= 5) score += 8;
+                else if (segment.length === 2) score += 3;
+                else if (segment.length === 1 && segment.hasRestBefore) score -= 3;
+                else if (segment.length === 6 && segment.restAfter === 1) score -= 3;
+            });
+
+            const counts = getPersonShiftCounts(assignments, personId);
+            const shiftDifference = Math.abs(counts.morning - counts.night);
+            score += shiftDifference <= 2 ? 5 : -3 * (shiftDifference - 2);
+
+            const preference = getShiftPreference(personId);
+            if (preference === 'morning') {
+                score += (counts.morning * 2) - (counts.night * 4);
+            } else if (preference === 'night') {
+                score += (counts.night * 2) - (counts.morning * 4);
+            } else if (shiftDifference <= 2) {
+                score += 5;
+            }
+
+            for (let index = 1; index < dates.length; index += 1) {
+                const previousShift = getAssignedShiftId(assignments, personId, dates[index - 1].key);
+                const currentShift = getAssignedShiftId(assignments, personId, dates[index].key);
+                if (!previousShift || !currentShift) continue;
+                if (previousShift === currentShift) {
+                    score += 1;
+                } else if (
+                    (previousShift === 'morning' && currentShift === 'night')
+                    || (previousShift === 'night' && currentShift === 'morning')
+                ) {
+                    score -= 2;
+                }
+            }
+
+            score -= Math.abs(workDays - averageLoad);
+            return score;
+        }
+
+        function getPersonalScoreStats(assignments) {
+            if (!state.people.length) {
+                return { scores: [], average: 0, variance: 0 };
+            }
             const workLoads = state.people.map((person) => getWorkDays(assignments, person.id));
             const averageLoad = workLoads.reduce((sum, days) => sum + days, 0) / workLoads.length;
+            const scores = state.people.map((person) => ({
+                personId: person.id,
+                name: person.name,
+                score: getPersonScheduleScore(assignments, person.id, averageLoad),
+            }));
+            const average = scores.reduce((sum, item) => sum + item.score, 0) / scores.length;
+            const variance = scores.reduce(
+                (sum, item) => sum + ((item.score - average) ** 2),
+                0,
+            ) / scores.length;
+            return { scores, average, variance };
+        }
 
-            state.people.forEach((person, personIndex) => {
-                const targets = getPersonWorkloadTargets(person.id);
-                const attendanceDays = workLoads[personIndex] + targets.paidLeaveDays;
-                score -= Math.abs(attendanceDays - targets.targetAttendanceDays) * 5;
-
-                getWorkSegments(assignments, person.id).forEach((segment) => {
-                    if (segment.length >= 3 && segment.length <= 5) score += 8;
-                    else if (segment.length === 2) score += 3;
-                    else if (segment.length === 1 && segment.hasRestBefore) score -= 3;
-                    else if (segment.length === 6 && segment.restAfter === 1) score -= 3;
-                });
-
-                const counts = getPersonShiftCounts(assignments, person.id);
-                const shiftDifference = Math.abs(counts.morning - counts.night);
-                score += shiftDifference <= 2 ? 5 : -3 * (shiftDifference - 2);
-
-                const preference = getShiftPreference(person.id);
-                if (preference === 'morning') {
-                    score += (counts.morning * 2) - (counts.night * 4);
-                } else if (preference === 'night') {
-                    score += (counts.night * 2) - (counts.morning * 4);
-                } else if (shiftDifference <= 2) {
-                    score += 5;
-                }
-
-                for (let index = 1; index < dates.length; index += 1) {
-                    const previousShift = getAssignedShiftId(assignments, person.id, dates[index - 1].key);
-                    const currentShift = getAssignedShiftId(assignments, person.id, dates[index].key);
-                    if (!previousShift || !currentShift) continue;
-                    if (previousShift === currentShift) {
-                        score += 1;
-                    } else if (
-                        (previousShift === 'morning' && currentShift === 'night')
-                        || (previousShift === 'night' && currentShift === 'morning')
-                    ) {
-                        score -= 2;
-                    }
-                }
-
-                score -= Math.abs(workLoads[personIndex] - averageLoad);
-            });
+        function scoreSchedule(assignments) {
+            const personalStats = getPersonalScoreStats(assignments);
+            let score = personalStats.scores.reduce((sum, item) => sum + item.score, 0);
 
             dates.forEach((date) => {
                 const morning = assignments[date.key]?.morning?.length || 0;
@@ -3357,7 +3779,7 @@
                 score += difference <= 2 ? 2 : -2 * (difference - 2);
             });
 
-            return score;
+            return score - (personalStats.variance * 0.5);
         }
 
         function cloneLockedAssignments() {
@@ -3410,7 +3832,7 @@
 
         function createArchiveData() {
             return {
-                schemaVersion: '1.0.0',
+                schemaVersion: '1.1.0',
                 archiveType: 'duty-schedule',
                 exportedAt: new Date().toISOString(),
                 app: {
@@ -3435,7 +3857,13 @@
                         weekendMinimum: schedulePolicy.weekendMinimum,
                         specialWeekdays: [...schedulePolicy.specialWeekdays],
                         specialMinimum: schedulePolicy.specialMinimum,
-                        minimumNight: schedulePolicy.minimumNight,
+                        baseMorning: state.staffing.baseMorning,
+                        baseNight: state.staffing.baseNight,
+                        strategies: state.staffing.strategies.map((strategy) => ({
+                            ...strategy,
+                            dates: [...strategy.dates],
+                            weekdays: [...strategy.weekdays],
+                        })),
                     },
                     optimization: {
                         rewardScore: {
@@ -3451,7 +3879,8 @@
                             balancedDailyMorningNight: 2,
                             attendanceTargetDifferencePerDay: -5,
                         },
-                        scoreMode: 'reward-rules-v3',
+                        personalScoreVarianceWeight: 0.5,
+                        scoreMode: 'reward-rules-v4-personal-variance',
                         aiSolutionCount: AI_SOLUTION_COUNT,
                     },
                 },
@@ -3484,6 +3913,9 @@
                         assignments: cloneAssignments(solution.assignments),
                         filled: solution.filled,
                         score: solution.score,
+                        personalScoreAverage: solution.personalScoreAverage,
+                        personalScoreVariance: solution.personalScoreVariance,
+                        personalScores: (solution.personalScores || []).map((item) => ({ ...item })),
                         minAttendanceDays: solution.minAttendanceDays,
                         maxAttendanceDays: solution.maxAttendanceDays,
                         minExtraDays: solution.minExtraDays,
@@ -3573,6 +4005,50 @@
             return result;
         }
 
+        function sanitizeStaffingConfig(source, validDates) {
+            const validDateSet = new Set(validDates);
+            const baseMorning = normalizeStaffingNumber(
+                source?.baseMorning ?? source?.minimumMorning,
+                schedulePolicy.minimumMorning,
+            );
+            const baseNight = normalizeStaffingNumber(
+                source?.baseNight ?? source?.minimumNight,
+                schedulePolicy.minimumNight,
+            );
+            const strategies = (Array.isArray(source?.strategies) ? source.strategies : [])
+                .slice(0, 100)
+                .map((strategy, index) => {
+                    const type = strategy?.type === 'weekday' ? 'weekday' : 'dates';
+                    const datesForStrategy = type === 'dates'
+                        ? [...new Set((Array.isArray(strategy?.dates) ? strategy.dates : [])
+                            .map(String)
+                            .filter((dateKey) => validDateSet.has(dateKey)))]
+                        : [];
+                    const weekdays = type === 'weekday'
+                        ? [...new Set((Array.isArray(strategy?.weekdays) ? strategy.weekdays : [])
+                            .map(Number)
+                            .filter((dayIndex) => Number.isInteger(dayIndex) && dayIndex >= 0 && dayIndex <= 6))]
+                        : [];
+                    return {
+                        id: /^[A-Za-z0-9_-]{1,80}$/.test(String(strategy?.id || ''))
+                            ? String(strategy.id)
+                            : `imported-staff-${index + 1}`,
+                        name: sanitizeText(strategy?.name || `人力策略 ${index + 1}`).slice(0, 80),
+                        type,
+                        dates: datesForStrategy,
+                        weekdays,
+                        morningDelta: normalizeStaffingNumber(strategy?.morningDelta, 0),
+                        nightDelta: normalizeStaffingNumber(strategy?.nightDelta, 0),
+                        enabled: strategy?.enabled !== false,
+                    };
+                })
+                .filter((strategy) =>
+                    (strategy.dates.length || strategy.weekdays.length)
+                    && strategy.morningDelta + strategy.nightDelta > 0
+                );
+            return { baseMorning, baseNight, strategies };
+        }
+
         function parseArchiveData(archive) {
             if (!archive || archive.archiveType !== 'duty-schedule') {
                 throw new Error('不是有效的自动排班存档');
@@ -3614,6 +4090,7 @@
             const dateKeys = [...new Set(archive.period.dates.map(String))];
             const importedDates = dateKeys.map(buildDateFromKey);
             const validDates = new Set(dateKeys);
+            const staffing = sanitizeStaffingConfig(archive.settings?.staffing, dateKeys);
             const rules = {};
             Object.entries(archive.preferences || {}).forEach(([personId, personRules]) => {
                 if (!validPeople.has(personId)) {
@@ -3658,6 +4135,15 @@
                     assignments: sanitizeAssignments(solution.assignments, validPeople, dateKeys),
                     filled: Number(solution.filled) || 0,
                     score: Number(solution.score) || 0,
+                    personalScoreAverage: Number(solution.personalScoreAverage) || 0,
+                    personalScoreVariance: Math.max(0, Number(solution.personalScoreVariance) || 0),
+                    personalScores: Array.isArray(solution.personalScores)
+                        ? solution.personalScores.slice(0, people.length).map((item) => ({
+                            personId: validPeople.has(item?.personId) ? item.personId : '',
+                            name: sanitizeText(item?.name || '').slice(0, 100),
+                            score: Number(item?.score) || 0,
+                        })).filter((item) => item.personId)
+                        : [],
                     minAttendanceDays: Number(solution.minAttendanceDays ?? solution.minCombinedDays) || 0,
                     maxAttendanceDays: Number(solution.maxAttendanceDays ?? solution.maxCombinedDays) || 0,
                     minExtraDays: Number(solution.minExtraDays) || 0,
@@ -3692,6 +4178,7 @@
                 dates: importedDates,
                 people,
                 rules,
+                staffing,
                 assignments,
                 locked,
                 lockOrigins,
@@ -3797,19 +4284,26 @@
                 dates = imported.dates;
                 state.people = imported.people;
                 state.rules = imported.rules;
+                state.staffing = imported.staffing;
                 state.assignments = imported.assignments;
                 state.locked = imported.locked;
                 state.lockOrigins = imported.lockOrigins;
-                state.solutions = imported.solutions;
-                state.activeSolutionIndex = imported.solutions.length
-                    ? Math.max(-1, Math.min(imported.activeSolutionIndex, imported.solutions.length - 1))
-                    : -1;
                 state.viewMode = imported.viewMode;
                 state.selectedPersonId = imported.selectedPersonId;
                 state.openPersonId = imported.openPersonId;
                 state.preferenceShifts = imported.preferenceShifts;
                 state.preferenceModes = imported.preferenceModes;
                 state.shiftPreferences = imported.shiftPreferences;
+                state.solutions = imported.solutions.map((solution) =>
+                    createSolutionRecord(solution.assignments, {
+                        source: solution.source,
+                        name: solution.name,
+                        summary: solution.summary,
+                    })
+                );
+                state.activeSolutionIndex = state.solutions.length
+                    ? Math.max(-1, Math.min(imported.activeSolutionIndex, state.solutions.length - 1))
+                    : -1;
                 state.diagnostics = imported.diagnostics;
                 archiveExtensions = imported.extensions;
                 closeAssignmentActionMenu();
@@ -3832,6 +4326,7 @@
 
         function renderAll() {
             syncViewSwitch();
+            renderStaffingControls();
             renderRange();
             renderPeople();
             renderCalendar();
@@ -3866,6 +4361,53 @@
             state.openPersonId = '';
             syncOpenPersonCard();
         }
+
+        baseMorningInput.addEventListener('change', () => {
+            const value = normalizeStaffingNumber(baseMorningInput.value, -1);
+            if (value < 0) {
+                baseMorningInput.value = state.staffing.baseMorning;
+                showToast('早班人数必须是非负整数');
+                return;
+            }
+            state.staffing.baseMorning = value;
+            renderStaffingControls();
+            invalidateSolutionsForStaffingChange();
+        });
+
+        baseNightInput.addEventListener('change', () => {
+            const value = normalizeStaffingNumber(baseNightInput.value, -1);
+            if (value < 0) {
+                baseNightInput.value = state.staffing.baseNight;
+                showToast('晚班人数必须是非负整数');
+                return;
+            }
+            state.staffing.baseNight = value;
+            renderStaffingControls();
+            invalidateSolutionsForStaffingChange();
+        });
+
+        strategyTypeSelect.addEventListener('change', syncStrategyEditorType);
+        document.getElementById('addStrategyBtn').addEventListener('click', addStaffingStrategy);
+        strategyList.addEventListener('click', (event) => {
+            const toggleButton = event.target.closest('[data-toggle-strategy]');
+            const deleteButton = event.target.closest('[data-delete-strategy]');
+            if (!toggleButton && !deleteButton) {
+                return;
+            }
+            const strategyId = (toggleButton || deleteButton).dataset.toggleStrategy
+                || (toggleButton || deleteButton).dataset.deleteStrategy;
+            const strategy = state.staffing.strategies.find((item) => item.id === strategyId);
+            if (!strategy) {
+                return;
+            }
+            if (toggleButton) {
+                strategy.enabled = !strategy.enabled;
+            } else {
+                state.staffing.strategies = state.staffing.strategies.filter((item) => item.id !== strategyId);
+            }
+            renderStaffingControls();
+            invalidateSolutionsForStaffingChange();
+        });
 
         document.getElementById('shiftViewBtn').addEventListener('click', () => {
             state.viewMode = 'shift';
@@ -4025,6 +4567,7 @@
             closeAssignmentActionMenu();
         });
 
+        syncStrategyEditorType();
         renderAll();
     </script>
 </body>
