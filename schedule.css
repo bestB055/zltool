@@ -167,35 +167,10 @@ h1 {
     gap: 7px;
 }
 
-.ai-model-option {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 20px;
-    padding-left: 2px;
-    color: var(--muted);
-    font-size: 0.78rem;
-    font-weight: 600;
-    cursor: pointer;
-    user-select: none;
-}
-
-.ai-model-option input {
-    width: 14px;
-    height: 14px;
-    margin: 0;
-    accent-color: var(--primary);
-    cursor: pointer;
-}
-
-.ai-model-option:has(input:focus-visible) {
-    outline: 2px solid rgba(36, 107, 254, 0.24);
-    outline-offset: 2px;
-}
-
-.ai-model-option:has(input:disabled) {
-    cursor: wait;
-    opacity: 0.68;
+.ai-stop-btn:not(:disabled) {
+    border-color: rgba(217, 45, 32, 0.28);
+    color: var(--red);
+    background: rgba(217, 45, 32, 0.06);
 }
 
 .staffing-panel {
@@ -1418,7 +1393,8 @@ body.manual-menu-open {
     color: var(--red);
 }
 
-#solveBtn:disabled {
+#solveBtn:disabled,
+#aiSolveBtn:disabled {
     cursor: wait;
     opacity: 0.68;
 }

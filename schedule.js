@@ -66,7 +66,6 @@ function createDefaultStaffing() {
 
 const state = {
     viewMode: 'shift',
-    useAi: false,
     selectedPersonId: 'p1',
     openPersonId: '',
     preferenceShifts: {},
@@ -110,7 +109,7 @@ const toast = document.getElementById('toast');
 const archiveFileInput = document.getElementById('archiveFileInput');
 const importArchiveBtn = document.getElementById('importArchiveBtn');
 const solveBtn = document.getElementById('solveBtn');
-const useAiCheckbox = document.getElementById('useAiCheckbox');
+const aiSolveBtn = document.getElementById('aiSolveBtn');
 const aiSolveStatus = document.getElementById('aiSolveStatus');
 const baseTotalInput = document.getElementById('baseTotalInput');
 const baseMorningInput = document.getElementById('baseMorningInput');
@@ -130,6 +129,8 @@ let scheduleRewardRules = '';
 let editingStrategyId = '';
 let strategyDraftDates = new Set();
 let strategyDraftWeekdays = new Set();
+let aiAbortController = null;
+let localSolveRunning = false;
 
 function getCycleDates() {
     const today = new Date();
@@ -209,11 +210,11 @@ function setAiSolveStatus(message = '', isError = false) {
     aiSolveStatus.classList.toggle('error', isError);
 }
 
-async function loadScheduleRewardRules() {
+async function loadScheduleRewardRules(signal) {
     if (scheduleRewardRules) {
         return scheduleRewardRules;
     }
-    const response = await fetch(SCHEDULE_RULES_URL, { cache: 'no-store' });
+    const response = await fetch(SCHEDULE_RULES_URL, { cache: 'no-store', signal });
     if (!response.ok) {
         throw new Error(`奖励规则加载失败：HTTP ${response.status}`);
     }
@@ -380,11 +381,12 @@ function extractJson(content, stage = 'DeepSeek') {
     throw new Error(`${stage}返回的 JSON 无法解析，请重试`);
 }
 
-async function callDeepSeekJson(apiKey, systemPrompt, input) {
+async function callDeepSeekJson(apiKey, systemPrompt, input, signal) {
     let response;
     try {
         response = await fetch(DEEPSEEK_API_URL, {
             method: 'POST',
+            signal,
             headers: {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${apiKey}`,
@@ -400,7 +402,10 @@ async function callDeepSeekJson(apiKey, systemPrompt, input) {
                 ],
             }),
         });
-    } catch {
+    } catch (error) {
+        if (error.name === 'AbortError' || signal?.aborted) {
+            throw new DOMException('AI 排班已中断', 'AbortError');
+        }
         throw new Error('AI 排班网络请求失败');
     }
     const payload = await response.json().catch(() => ({}));
@@ -1620,12 +1625,12 @@ function serializeCompactAiRules() {
     return rules;
 }
 
-async function requestAiScheduleSolutions(localSolutions) {
+async function requestAiScheduleSolutions(localSolutions, signal) {
     const apiKey = getDeepSeekApiKey();
     if (!apiKey) {
-        throw new Error('未配置 DeepSeek API Key，本次仅生成本地方案');
+        throw new Error('未配置 DeepSeek API Key');
     }
-    const rewardRules = await loadScheduleRewardRules();
+    const rewardRules = await loadScheduleRewardRules(signal);
     const baseSystemPrompt = [
         '根据输入生成1个完整合法排班。dates每项为[日期,总人数最低,早班最低,晚班最低]；people每项为[ID,偏好,强制班次,目标工作天数,最多工作天数,带薪休假天数]；rules每项为[人员ID,日期,必须上,固定不上,是否休假]。',
         '严格遵守下方硬约束并优化得分。baseline仅供改进；avoid中的方案不得原样重复；repair.errors必须修复。',
@@ -1644,10 +1649,13 @@ async function requestAiScheduleSolutions(localSolutions) {
     const maximumAttempts = localSolutions.length ? 9 : 15;
 
     for (let attempt = 0; attempt < maximumAttempts && accepted.length < AI_SOLUTION_COUNT; attempt += 1) {
+        if (signal.aborted) {
+            throw new DOMException('AI 排班已中断', 'AbortError');
+        }
         const input = JSON.stringify(buildAiScheduleInput(localSolutions, accepted, repair));
         let result;
         try {
-            result = await callDeepSeekJson(apiKey, baseSystemPrompt, input);
+            result = await callDeepSeekJson(apiKey, baseSystemPrompt, input, signal);
             parseFailures = 0;
         } catch (error) {
             if (!/JSON|截断/.test(error.message) || parseFailures >= 2) {
@@ -1713,13 +1721,24 @@ async function requestAiScheduleSolutions(localSolutions) {
     return { accepted, rejected };
 }
 
-async function solveSchedules() {
-    const useAi = state.useAi;
+function mergeScheduleSolutions(...solutionGroups) {
+    const merged = [];
+    solutionGroups.flat().forEach((solution) => {
+        const signature = getSolutionSignature(solution.assignments);
+        if (!merged.some((item) => getSolutionSignature(item.assignments) === signature)) {
+            merged.push(solution);
+        }
+    });
+    return merged.sort((a, b) => b.score - a.score).slice(0, 10);
+}
+
+async function solveLocalSchedules() {
+    if (localSolveRunning) return;
+    localSolveRunning = true;
     const preflight = analyzeFixedRuleConflicts();
     state.diagnostics.lastSolve = preflight;
     solveBtn.disabled = true;
-    useAiCheckbox.disabled = true;
-    solveBtn.textContent = '正在排班...';
+    solveBtn.textContent = '本地排班中...';
     setAiSolveStatus('正在生成本地候选方案...');
 
     if (preflight.blocking.length) {
@@ -1727,86 +1746,100 @@ async function solveSchedules() {
         state.activeSolutionIndex = -1;
         setAiSolveStatus(`无可行解：${preflight.blocking.slice(0, 3).join('；')}`, true);
         showToast(formatScheduleConflictReport(preflight));
+        localSolveRunning = false;
         solveBtn.disabled = false;
-        useAiCheckbox.disabled = false;
-        solveBtn.textContent = '自动排班';
-        renderAll();
-        return;
-    }
-
-    const results = [];
-    const currentAssignments = sanitizeAssignments(
-        state.assignments,
-        new Set(state.people.map((person) => person.id)),
-        dates.map((date) => date.key),
-    );
-    if (countAssignedSlots(currentAssignments) && validateHardConstraints(currentAssignments)) {
-        results.push(createSolutionRecord(currentAssignments, {
-            source: 'local',
-            name: '当前合法方案',
-            summary: '排班前页面中已有的合法方案，作为本次求解保底。',
-        }));
-    }
-    for (let seed = 0; seed < 80; seed += 1) {
-        const attempt = buildSchedule(seed);
-        if (attempt) {
-            attempt.source = 'local';
-            attempt.name = `本地方案 ${results.length + 1}`;
-            attempt.summary = '由现有机械算法生成。';
-            const signature = getSolutionSignature(attempt.assignments);
-            if (!results.some((item) => getSolutionSignature(item.assignments) === signature)) {
-                results.push(attempt);
-            }
-        }
-        if (seed > 0 && seed % 10 === 0) {
-            await yieldToMainThread();
-        }
-    }
-
-    results.sort((a, b) => b.score - a.score);
-    results.splice(5);
-    results.forEach((solution, index) => {
-        if (solution.name.startsWith('本地方案')) {
-            solution.name = `本地方案 ${index + 1}`;
-            solution.summary = '由机械算法生成，并按班休紧凑度、满勤、偏好和公平性综合排序。';
-        }
-    });
-
-    state.solutions = results;
-    if (results.length) {
-        state.assignments = cloneAssignments(results[0].assignments);
-        state.activeSolutionIndex = 0;
-        setAiSolveStatus('本地方案已生成，正在请求 AI 优化方案...');
-    } else {
-        const fallback = state.diagnostics.lastSolve || { blocking: [], warnings: [] };
-        fallback.warnings = [
-            ...(fallback.warnings || []),
-            '固定项预检通过，但候选搜索未找到完整方案，可能是逐日贪心在后续日期遇到死路。',
-        ];
-        state.diagnostics.lastSolve = fallback;
-        showToast(formatScheduleConflictReport(fallback));
-    }
-    renderAll();
-
-    if (!useAi) {
-        setAiSolveStatus(results.length
-            ? `排班完成：已生成 ${results.length} 个本地候选，未启用大模型。`
-            : '本地算法未生成可行方案；大模型未启用。', !results.length);
-        showToast(results.length
-            ? `本地排班完成，共 ${results.length} 个候选方案`
-            : '本次未形成可应用方案');
-        solveBtn.disabled = false;
-        useAiCheckbox.disabled = false;
-        solveBtn.textContent = '自动排班';
+        solveBtn.textContent = '本地排班';
         renderAll();
         return;
     }
 
     try {
-        const aiResult = await requestAiScheduleSolutions(results);
-        const localSlots = Math.max(0, 10 - aiResult.accepted.length);
-        state.solutions = [...results.slice(0, localSlots), ...aiResult.accepted]
-            .sort((a, b) => b.score - a.score);
+        const results = [];
+        const currentAssignments = sanitizeAssignments(
+            state.assignments,
+            new Set(state.people.map((person) => person.id)),
+            dates.map((date) => date.key),
+        );
+        if (countAssignedSlots(currentAssignments) && validateHardConstraints(currentAssignments)) {
+            results.push(createSolutionRecord(currentAssignments, {
+                source: 'local',
+                name: '当前合法方案',
+                summary: '排班前页面中已有的合法方案，作为本次求解保底。',
+            }));
+        }
+        for (let seed = 0; seed < 80; seed += 1) {
+            const attempt = buildSchedule(seed);
+            if (attempt) {
+                attempt.source = 'local';
+                attempt.name = `本地方案 ${results.length + 1}`;
+                attempt.summary = '由现有机械算法生成。';
+                const signature = getSolutionSignature(attempt.assignments);
+                if (!results.some((item) => getSolutionSignature(item.assignments) === signature)) {
+                    results.push(attempt);
+                }
+            }
+            if (seed > 0 && seed % 10 === 0) {
+                await yieldToMainThread();
+            }
+        }
+
+        results.sort((a, b) => b.score - a.score);
+        results.splice(5);
+        results.forEach((solution, index) => {
+            if (solution.name.startsWith('本地方案')) {
+                solution.name = `本地方案 ${index + 1}`;
+                solution.summary = '由机械算法生成，并按班休紧凑度、满勤、偏好和公平性综合排序。';
+            }
+        });
+
+        const existingAiSolutions = state.solutions.filter((solution) => solution.source === 'ai');
+        state.solutions = mergeScheduleSolutions(results, existingAiSolutions);
+        if (state.solutions.length) {
+            state.assignments = cloneAssignments(state.solutions[0].assignments);
+            state.activeSolutionIndex = 0;
+        } else {
+            const fallback = state.diagnostics.lastSolve || { blocking: [], warnings: [] };
+            fallback.warnings = [
+                ...(fallback.warnings || []),
+                '固定项预检通过，但候选搜索未找到完整方案，可能是逐日贪心在后续日期遇到死路。',
+            ];
+            state.diagnostics.lastSolve = fallback;
+            showToast(formatScheduleConflictReport(fallback));
+        }
+        setAiSolveStatus(results.length
+            ? `本地排班完成：已生成 ${results.length} 个机械算法候选。`
+            : '本地算法未生成可行方案。', !results.length);
+        showToast(results.length
+            ? `本地排班完成，共 ${results.length} 个候选方案`
+            : '本次未形成可应用方案');
+    } finally {
+        localSolveRunning = false;
+        solveBtn.disabled = false;
+        solveBtn.textContent = '本地排班';
+        renderAll();
+    }
+}
+
+async function solveAiSchedules() {
+    if (aiAbortController) return;
+    const preflight = analyzeFixedRuleConflicts();
+    state.diagnostics.lastSolve = preflight;
+    if (preflight.blocking.length) {
+        setAiSolveStatus(`无可行解：${preflight.blocking.slice(0, 3).join('；')}`, true);
+        showToast(formatScheduleConflictReport(preflight));
+        renderAll();
+        return;
+    }
+
+    const controller = new AbortController();
+    aiAbortController = controller;
+    aiSolveBtn.textContent = '中断';
+    aiSolveBtn.classList.add('ai-stop-btn');
+    setAiSolveStatus('正在请求 AI 排班；等待期间仍可使用本地排班。');
+    const baselineSolutions = state.solutions.slice(0, 5);
+    try {
+        const aiResult = await requestAiScheduleSolutions(baselineSolutions, controller.signal);
+        state.solutions = mergeScheduleSolutions(state.solutions, aiResult.accepted);
         if (state.solutions.length) {
             state.assignments = cloneAssignments(state.solutions[0].assignments);
             state.activeSolutionIndex = 0;
@@ -1814,31 +1847,44 @@ async function solveSchedules() {
         if (state.solutions.length) {
             setAiSolveStatus(aiResult.accepted.length
                 ? `排班完成：已获得 ${state.solutions.length} 个满足硬约束的候选，其中 ${aiResult.accepted.length} 个为 AI 优化方案。`
-                : `排班完成：已保留全部满足硬约束的候选，AI 未产生不同的新方案。`);
-            showToast(`排班完成，共 ${state.solutions.length} 个候选方案`);
+                : 'AI 未产生不同的新方案，已保留现有候选。');
+            showToast(aiResult.accepted.length
+                ? `AI 排班完成，新增 ${aiResult.accepted.length} 个候选方案`
+                : 'AI 未生成不同的新方案');
         } else {
             const fallback = state.diagnostics.lastSolve || { blocking: [], warnings: [] };
             fallback.warnings = [
                 ...(fallback.warnings || []),
-                '预检未发现直接冲突，但本地搜索与 AI 多轮修复均未构造出完整方案。',
+                '预检未发现直接冲突，但 AI 多轮修复仍未构造出完整方案。',
             ];
             state.diagnostics.lastSolve = fallback;
-            setAiSolveStatus('排班仍在约束边界上未完成，请检查候选诊断后再次求解。', true);
+            setAiSolveStatus('AI 排班未完成，请检查候选诊断后再次求解。', true);
             showToast('本次未形成可应用方案，原有排班未被覆盖');
         }
     } catch (error) {
-        if (results.length) {
-            setAiSolveStatus(`已保留满足硬约束的本地方案；${error.message}`, true);
-            showToast(`本地方案已生成；${error.message}`);
+        if (error.name === 'AbortError' || controller.signal.aborted) {
+            setAiSolveStatus('AI 排班已中断，现有本地及候选方案不受影响。');
+            showToast('已中断 AI 排班');
         } else {
             setAiSolveStatus(error.message, true);
+            showToast(error.message);
         }
     } finally {
-        solveBtn.disabled = false;
-        useAiCheckbox.disabled = false;
-        solveBtn.textContent = '自动排班';
+        if (aiAbortController === controller) {
+            aiAbortController = null;
+        }
+        aiSolveBtn.disabled = false;
+        aiSolveBtn.textContent = 'AI 排班';
+        aiSolveBtn.classList.remove('ai-stop-btn');
         renderAll();
     }
+}
+
+function stopAiSchedule() {
+    if (!aiAbortController) return;
+    aiSolveBtn.disabled = true;
+    setAiSolveStatus('正在中断 AI 排班...');
+    aiAbortController.abort();
 }
 
 function collectLockedAssignments() {
@@ -3026,7 +3072,6 @@ function createArchiveData() {
         extensions: JSON.parse(JSON.stringify(archiveExtensions)),
         ui: {
             viewMode: state.viewMode,
-            useAi: state.useAi,
             selectedPersonId: state.selectedPersonId,
             openPersonId: state.openPersonId,
             preferenceShifts: { ...state.preferenceShifts },
@@ -3429,7 +3474,6 @@ function parseArchiveData(archive) {
             ? archive.schedule.activeSolutionIndex
             : -1,
         viewMode: archive.ui?.viewMode === 'person' ? 'person' : 'shift',
-        useAi: archive.ui?.useAi === true,
         selectedPersonId: validPeople.has(archive.ui?.selectedPersonId)
             ? archive.ui.selectedPersonId
             : people[0].id,
@@ -3534,7 +3578,6 @@ async function importArchiveFile(file) {
         state.locked = imported.locked;
         state.lockOrigins = imported.lockOrigins;
         state.viewMode = imported.viewMode;
-        state.useAi = imported.useAi;
         state.selectedPersonId = imported.selectedPersonId;
         state.openPersonId = imported.openPersonId;
         state.preferenceShifts = imported.preferenceShifts;
@@ -3572,7 +3615,6 @@ async function importArchiveFile(file) {
 function syncViewSwitch() {
     document.getElementById('shiftViewBtn').classList.toggle('active', state.viewMode === 'shift');
     document.getElementById('personViewBtn').classList.toggle('active', state.viewMode === 'person');
-    useAiCheckbox.checked = state.useAi;
 }
 
 function renderAll() {
@@ -3710,12 +3752,16 @@ archiveFileInput.addEventListener('change', () => {
     }
 });
 
-document.getElementById('solveBtn').addEventListener('click', solveSchedules);
-useAiCheckbox.addEventListener('change', () => {
-    state.useAi = useAiCheckbox.checked;
-    setAiSolveStatus(state.useAi ? '已启用大模型，自动排班时将在本地方案后请求 AI 优化。' : '');
+solveBtn.addEventListener('click', solveLocalSchedules);
+aiSolveBtn.addEventListener('click', () => {
+    if (aiAbortController) {
+        stopAiSchedule();
+    } else {
+        solveAiSchedules();
+    }
 });
 document.getElementById('clearBtn').addEventListener('click', () => {
+    stopAiSchedule();
     state.locked = {};
     state.lockOrigins = {};
     clearAssignments(false);
