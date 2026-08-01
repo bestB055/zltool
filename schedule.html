@@ -6,7 +6,7 @@
     <title>自动排班 - 带班首页</title>
     <link rel="stylesheet" href="recent-updates.css?v=20260727-1">
     <script src="recent-updates.js?v=20260724-2" defer></script>
-    <link rel="stylesheet" href="schedule.css?v=20260801-4">
+    <link rel="stylesheet" href="schedule.css?v=20260801-5">
 </head>
 <body>
     <main class="page">
@@ -83,12 +83,12 @@
                             </div>
                             <div class="strategy-editor-actions">
                                 <button class="btn primary" type="button" id="addStrategyBtn">保存策略</button>
+                                <button class="btn ghost" type="button" id="openStrategyPreviewBtn">策略预览</button>
                                 <button class="btn ghost" type="button" id="cancelStrategyEditBtn" hidden>取消</button>
                             </div>
                             <div class="strategy-target-picker" id="strategyTargetPicker" aria-label="策略匹配范围"></div>
                         </div>
                         <div class="strategy-list" id="strategyList"></div>
-                        <div class="strategy-preview" id="strategyPreview"></div>
                     </div>
                 </div>
             </div>
@@ -151,9 +151,25 @@
         </div>
     </main>
 
+    <dialog class="strategy-preview-dialog" id="strategyPreviewDialog" aria-labelledby="strategyPreviewTitle">
+        <div class="strategy-preview-page">
+            <div class="strategy-preview-header">
+                <div>
+                    <h2 id="strategyPreviewTitle">策略预览</h2>
+                    <p>当前周期各日期最终生效的人力配置</p>
+                </div>
+                <button class="strategy-preview-close" type="button" id="closeStrategyPreviewBtn" aria-label="关闭策略预览">×</button>
+            </div>
+            <div class="strategy-preview-content" id="strategyPreview"></div>
+            <div class="strategy-preview-footer">
+                <button class="btn primary" type="button" id="returnFromStrategyPreviewBtn">返回设置</button>
+            </div>
+        </div>
+    </dialog>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script src="app-config.js"></script>
-    <script src="schedule.js?v=20260801-4"></script>
+    <script src="schedule.js?v=20260801-7"></script>
 </body>
 </html>

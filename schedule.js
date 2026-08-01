@@ -16,13 +16,16 @@ const schedulePolicy = {
     maximumPreferredPureRestDays: 2,
     internalPureRestPenalty: 12,
     boundaryPureRestPenalty: 10,
+    compactWorkSegmentReward: 16,
+    isolatedWorkDayPenalty: 16,
+    sixDayWorkSegmentPenalty: 16,
 };
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 const DEEPSEEK_API_KEY_STORAGE = 'split-word-deepseek-api-key';
 const DEPLOYMENT_CONFIG = window.DAIBAN_HOME_CONFIG || {};
 const CONFIGURED_DEEPSEEK_API_KEY = normalizeApiKey(DEPLOYMENT_CONFIG.DEEPSEEK_API_KEY || '');
 const AI_SOLUTION_COUNT = 3;
-const SCHEDULE_RULES_URL = '排班提示.txt?v=20260801-2';
+const SCHEDULE_RULES_URL = '排班提示.txt?v=20260801-3';
 const MAX_ARCHIVE_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_ARCHIVE_PEOPLE = 300;
 const MAX_ARCHIVE_DATES = 62;
@@ -117,6 +120,7 @@ const strategyNightInput = document.getElementById('strategyNightInput');
 const strategyTargetPicker = document.getElementById('strategyTargetPicker');
 const cancelStrategyEditBtn = document.getElementById('cancelStrategyEditBtn');
 const strategyList = document.getElementById('strategyList');
+const strategyPreviewDialog = document.getElementById('strategyPreviewDialog');
 const strategyPreview = document.getElementById('strategyPreview');
 let toastTimer = null;
 let archiveExtensions = {};
@@ -424,6 +428,14 @@ function hasPreferenceRule(personId, dateKey) {
     return rule.vacation || rule.allow.size > 0 || rule.block.size > 0;
 }
 
+function isAllDayAvailableRule(personId, dateKey) {
+    const rule = getRule(personId, dateKey);
+    return !rule.vacation
+        && rule.allow.size === 1
+        && rule.allow.has('all')
+        && rule.block.size === 0;
+}
+
 function getManualEditBlockReason(personId, dateKey, requestedShiftId = '') {
     const forcedShift = getForcedShift(personId);
     if (requestedShiftId && forcedShift && requestedShiftId !== forcedShift) {
@@ -435,7 +447,7 @@ function getManualEditBlockReason(personId, dateKey, requestedShiftId = '') {
     if (lockedShift) {
         return '该日期已有固定班次，请先点击排班按钮取消固定或删除';
     }
-    if (hasPreferenceRule(personId, dateKey)) {
+    if (hasPreferenceRule(personId, dateKey) && !isAllDayAvailableRule(personId, dateKey)) {
         return '该日期已在人员固定班次中设置，请先回到人员卡片修改';
     }
     return '';
@@ -567,6 +579,15 @@ function renderStaffingPreview() {
     }).join('');
 }
 
+function openStrategyPreview() {
+    renderStaffingPreview();
+    strategyPreviewDialog.showModal();
+}
+
+function closeStrategyPreview() {
+    strategyPreviewDialog.close();
+}
+
 function renderStaffingControls() {
     baseTotalInput.value = state.staffing.baseTotal;
     baseMorningInput.value = state.staffing.baseMorning;
@@ -592,7 +613,9 @@ function renderStaffingControls() {
         `).join('')
         : '<div class="strategy-empty">暂无特殊策略组</div>';
     renderStrategyTargetPicker();
-    renderStaffingPreview();
+    if (strategyPreviewDialog.open) {
+        renderStaffingPreview();
+    }
 }
 
 function syncStrategyEditorType() {
@@ -2689,6 +2712,19 @@ function getAssignedShiftId(assignments, personId, dateKey) {
     return shifts.find((shift) => assignments[dateKey]?.[shift.id]?.includes(personId))?.id || '';
 }
 
+function getWorkSegmentScore(segment) {
+    if (segment.length >= 3 && segment.length <= 5) {
+        return schedulePolicy.compactWorkSegmentReward;
+    }
+    if (segment.length === 1 && segment.hasRestBefore && segment.restAfter > 0) {
+        return -schedulePolicy.isolatedWorkDayPenalty;
+    }
+    if (segment.length === 6) {
+        return -schedulePolicy.sixDayWorkSegmentPenalty;
+    }
+    return 0;
+}
+
 function getPersonScheduleScore(assignments, personId, averageLoad) {
     let score = 0;
     const workDays = getWorkDays(assignments, personId);
@@ -2697,9 +2733,7 @@ function getPersonScheduleScore(assignments, personId, averageLoad) {
     score -= Math.abs(attendanceDays - targets.targetAttendanceDays) * 5;
 
     getWorkSegments(assignments, personId).forEach((segment) => {
-        if (segment.length >= 3 && segment.length <= 5) score += 8;
-        else if (segment.length === 1 && segment.hasRestBefore && segment.restAfter > 0) score -= 8;
-        else if (segment.length === 6) score -= 8;
+        score += getWorkSegmentScore(segment);
     });
     score -= getPureRestPenalty(assignments, personId);
 
@@ -2856,10 +2890,10 @@ function createArchiveData() {
             },
             optimization: {
                 rewardScore: {
-                    workSegment3To5: 8,
+                    workSegment3To5: schedulePolicy.compactWorkSegmentReward,
                     workSegment2: 0,
-                    isolatedWorkDay: -8,
-                    workSegment6: -8,
+                    isolatedWorkDay: -schedulePolicy.isolatedWorkDayPenalty,
+                    workSegment6: -schedulePolicy.sixDayWorkSegmentPenalty,
                     balancedMorningNight: 5,
                     preferredShift: 2,
                     oppositeShift: -4,
@@ -2870,7 +2904,7 @@ function createArchiveData() {
                     attendanceTargetDifferencePerDay: -5,
                 },
                 personalScoreStandardDeviationWeight: 0.5,
-                scoreMode: 'reward-rules-v6-symmetric-shift-rest-boundaries',
+                scoreMode: 'reward-rules-v7-strong-compact-work-segments',
                 aiSolutionCount: AI_SOLUTION_COUNT,
             },
         },
@@ -3503,6 +3537,14 @@ strategyTargetPicker.addEventListener('click', (event) => {
     renderStrategyTargetPicker();
 });
 document.getElementById('addStrategyBtn').addEventListener('click', saveStaffingStrategy);
+document.getElementById('openStrategyPreviewBtn').addEventListener('click', openStrategyPreview);
+document.getElementById('closeStrategyPreviewBtn').addEventListener('click', closeStrategyPreview);
+document.getElementById('returnFromStrategyPreviewBtn').addEventListener('click', closeStrategyPreview);
+strategyPreviewDialog.addEventListener('click', (event) => {
+    if (event.target === strategyPreviewDialog) {
+        closeStrategyPreview();
+    }
+});
 cancelStrategyEditBtn.addEventListener('click', resetStrategyEditor);
 strategyList.addEventListener('click', (event) => {
     const editButton = event.target.closest('[data-edit-strategy]');
