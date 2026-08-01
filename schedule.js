@@ -6,7 +6,7 @@ const shifts = [
 const schedulePolicy = {
     weekdayMinimum: 7,
     weekendMinimum: 6,
-    specialWeekdays: [1, 3],
+    specialWeekdays: [3],
     specialMinimum: 8,
     minimumMorning: 3,
     minimumNight: 3,
@@ -35,10 +35,10 @@ function createDefaultStaffing() {
         strategies: [
             {
                 id: 'preset-special-weekdays',
-                name: '周一、周三',
+                name: '周三',
                 type: 'weekday',
                 dates: [],
-                weekdays: [1, 3],
+                weekdays: [3],
                 total: schedulePolicy.specialMinimum,
                 morning: null,
                 night: null,
@@ -61,6 +61,7 @@ function createDefaultStaffing() {
 
 const state = {
     viewMode: 'shift',
+    useAi: false,
     selectedPersonId: 'p1',
     openPersonId: '',
     preferenceShifts: {},
@@ -104,6 +105,7 @@ const toast = document.getElementById('toast');
 const archiveFileInput = document.getElementById('archiveFileInput');
 const importArchiveBtn = document.getElementById('importArchiveBtn');
 const solveBtn = document.getElementById('solveBtn');
+const useAiCheckbox = document.getElementById('useAiCheckbox');
 const aiSolveStatus = document.getElementById('aiSolveStatus');
 const baseTotalInput = document.getElementById('baseTotalInput');
 const baseMorningInput = document.getElementById('baseMorningInput');
@@ -1669,9 +1671,11 @@ async function requestAiScheduleSolutions(localSolutions) {
 }
 
 async function solveSchedules() {
+    const useAi = state.useAi;
     const preflight = analyzeFixedRuleConflicts();
     state.diagnostics.lastSolve = preflight;
     solveBtn.disabled = true;
+    useAiCheckbox.disabled = true;
     solveBtn.textContent = '正在排班...';
     setAiSolveStatus('正在生成本地候选方案...');
 
@@ -1681,6 +1685,7 @@ async function solveSchedules() {
         setAiSolveStatus(`无可行解：${preflight.blocking.slice(0, 3).join('；')}`, true);
         showToast(formatScheduleConflictReport(preflight));
         solveBtn.disabled = false;
+        useAiCheckbox.disabled = false;
         solveBtn.textContent = '自动排班';
         renderAll();
         return;
@@ -1740,6 +1745,20 @@ async function solveSchedules() {
     }
     renderAll();
 
+    if (!useAi) {
+        setAiSolveStatus(results.length
+            ? `排班完成：已生成 ${results.length} 个本地候选，未启用大模型。`
+            : '本地算法未生成可行方案；大模型未启用。', !results.length);
+        showToast(results.length
+            ? `本地排班完成，共 ${results.length} 个候选方案`
+            : '本次未形成可应用方案');
+        solveBtn.disabled = false;
+        useAiCheckbox.disabled = false;
+        solveBtn.textContent = '自动排班';
+        renderAll();
+        return;
+    }
+
     try {
         const aiResult = await requestAiScheduleSolutions(results);
         const localSlots = Math.max(0, 10 - aiResult.accepted.length);
@@ -1773,6 +1792,7 @@ async function solveSchedules() {
         }
     } finally {
         solveBtn.disabled = false;
+        useAiCheckbox.disabled = false;
         solveBtn.textContent = '自动排班';
         renderAll();
     }
@@ -2860,6 +2880,7 @@ function createArchiveData() {
         extensions: JSON.parse(JSON.stringify(archiveExtensions)),
         ui: {
             viewMode: state.viewMode,
+            useAi: state.useAi,
             selectedPersonId: state.selectedPersonId,
             openPersonId: state.openPersonId,
             preferenceShifts: { ...state.preferenceShifts },
@@ -3262,6 +3283,7 @@ function parseArchiveData(archive) {
             ? archive.schedule.activeSolutionIndex
             : -1,
         viewMode: archive.ui?.viewMode === 'person' ? 'person' : 'shift',
+        useAi: archive.ui?.useAi === true,
         selectedPersonId: validPeople.has(archive.ui?.selectedPersonId)
             ? archive.ui.selectedPersonId
             : people[0].id,
@@ -3366,6 +3388,7 @@ async function importArchiveFile(file) {
         state.locked = imported.locked;
         state.lockOrigins = imported.lockOrigins;
         state.viewMode = imported.viewMode;
+        state.useAi = imported.useAi;
         state.selectedPersonId = imported.selectedPersonId;
         state.openPersonId = imported.openPersonId;
         state.preferenceShifts = imported.preferenceShifts;
@@ -3403,6 +3426,7 @@ async function importArchiveFile(file) {
 function syncViewSwitch() {
     document.getElementById('shiftViewBtn').classList.toggle('active', state.viewMode === 'shift');
     document.getElementById('personViewBtn').classList.toggle('active', state.viewMode === 'person');
+    useAiCheckbox.checked = state.useAi;
 }
 
 function renderAll() {
@@ -3533,6 +3557,10 @@ archiveFileInput.addEventListener('change', () => {
 });
 
 document.getElementById('solveBtn').addEventListener('click', solveSchedules);
+useAiCheckbox.addEventListener('change', () => {
+    state.useAi = useAiCheckbox.checked;
+    setAiSolveStatus(state.useAi ? '已启用大模型，自动排班时将在本地方案后请求 AI 优化。' : '');
+});
 document.getElementById('clearBtn').addEventListener('click', () => {
     state.locked = {};
     state.lockOrigins = {};

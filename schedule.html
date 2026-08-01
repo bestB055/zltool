@@ -6,7 +6,7 @@
     <title>自动排班 - 带班首页</title>
     <link rel="stylesheet" href="recent-updates.css?v=20260727-1">
     <script src="recent-updates.js?v=20260724-2" defer></script>
-    <link rel="stylesheet" href="schedule.css?v=20260801-2">
+    <link rel="stylesheet" href="schedule.css?v=20260801-3">
 </head>
 <body>
     <main class="page">
@@ -23,6 +23,10 @@
             </div>
             <div class="toolbar">
                 <button class="btn primary" type="button" id="solveBtn">自动排班</button>
+                <label class="ai-model-option" for="useAiCheckbox">
+                    <input type="checkbox" id="useAiCheckbox">
+                    <span>大模型</span>
+                </label>
                 <button class="btn ghost" type="button" id="clearBtn">清空排班</button>
             </div>
         </section>
@@ -148,6 +152,6 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script src="app-config.js"></script>
-    <script src="schedule.js?v=20260801-3"></script>
+    <script src="schedule.js?v=20260801-4"></script>
 </body>
 </html>
