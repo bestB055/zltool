@@ -17,15 +17,17 @@ const schedulePolicy = {
     internalPureRestPenalty: 12,
     boundaryPureRestPenalty: 10,
     compactWorkSegmentReward: 16,
-    isolatedWorkDayPenalty: 16,
-    sixDayWorkSegmentPenalty: 16,
+    isolatedWorkDayPenalty: 24,
+    sixDayWorkSegmentPenalty: 32,
+    candidatePureRestBenefitCap: 32,
+    dailyShiftImbalancePenalty: 16,
 };
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 const DEEPSEEK_API_KEY_STORAGE = 'split-word-deepseek-api-key';
 const DEPLOYMENT_CONFIG = window.DAIBAN_HOME_CONFIG || {};
 const CONFIGURED_DEEPSEEK_API_KEY = normalizeApiKey(DEPLOYMENT_CONFIG.DEEPSEEK_API_KEY || '');
 const AI_SOLUTION_COUNT = 3;
-const SCHEDULE_RULES_URL = '排班提示.txt?v=20260801-3';
+const SCHEDULE_RULES_URL = '排班提示.txt?v=20260801-6';
 const MAX_ARCHIVE_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_ARCHIVE_PEOPLE = 300;
 const MAX_ARCHIVE_DATES = 62;
@@ -1547,6 +1549,11 @@ function buildAiScheduleInput(localSolutions, acceptedSolutions = [], repair = n
                 preferredBoundaryMaximumDays: 1,
                 boundaryPenalty: `${schedulePolicy.boundaryPureRestPenalty} * (length - 1)^2`,
             },
+            dailyShiftBalance: {
+                allowedDifference: 'max(1, abs(minimumMorning - minimumNight))',
+                excessDifferencePenalty: `${schedulePolicy.dailyShiftImbalancePenalty} * excess^2`,
+                goal: 'prefer_the_less_staffed_shift_when_adding_surplus_attendance',
+            },
             staffing: {
                 baseTotal: state.staffing.baseTotal,
                 baseMorning: state.staffing.baseMorning,
@@ -2058,6 +2065,7 @@ function buildSchedule(seed) {
     }
 
     balanceMonthlyWorkload(assignments, seed);
+    rebalanceDailyShifts(assignments);
     if (!isScheduleValid(assignments)) {
         return null;
     }
@@ -2151,7 +2159,10 @@ function getDatePlanOptions(dateKey, seed = 0) {
     const compatible = shuffle(options.filter((option) =>
         shifts.every((shift) => (option[shift.id] || 0) >= lockedCounts[shift.id])
     ), seed + dateKey.charCodeAt(dateKey.length - 1))
-        .sort((a, b) => getDailyPlanPenalty(a, lockedCounts) - getDailyPlanPenalty(b, lockedCounts));
+        .sort((a, b) =>
+            getDailyPlanPenalty(a, lockedCounts, dateKey)
+            - getDailyPlanPenalty(b, lockedCounts, dateKey)
+        );
 
     if (compatible.length) {
         return compatible;
@@ -2174,8 +2185,9 @@ function getDatePlanOptions(dateKey, seed = 0) {
     return [fallback];
 }
 
-function getDailyPlanPenalty(plan, lockedCounts) {
-    return Math.max(0, plan.normal - lockedCounts.normal);
+function getDailyPlanPenalty(plan, lockedCounts, dateKey) {
+    return Math.max(0, plan.normal - lockedCounts.normal)
+        + getDailyShiftBalancePenalty(dateKey, plan.morning, plan.night);
 }
 
 function restoreAssignments(target, source) {
@@ -2238,6 +2250,44 @@ function balanceMonthlyWorkload(assignments, seed) {
     }
 }
 
+function rebalanceDailyShifts(assignments) {
+    dates.forEach((date) => {
+        const allowedDifference = getAllowedDailyShiftDifference(date.key);
+        let attempts = 0;
+        while (attempts < state.people.length) {
+            attempts += 1;
+            const morning = assignments[date.key]?.morning?.length || 0;
+            const night = assignments[date.key]?.night?.length || 0;
+            if (Math.abs(morning - night) <= allowedDifference) {
+                break;
+            }
+            const sourceShift = morning > night ? 'morning' : 'night';
+            const targetShift = sourceShift === 'morning' ? 'night' : 'morning';
+            const candidates = [...(assignments[date.key]?.[sourceShift] || [])]
+                .filter((personId) => !hasLockedAssignment(personId, date.key, sourceShift))
+                .map((personId) => {
+                    assignments[date.key][sourceShift] = assignments[date.key][sourceShift]
+                        .filter((id) => id !== personId);
+                    const allowed = canAssign(assignments, personId, date.key, targetShift);
+                    const preferenceCost = allowed
+                        ? getCandidatePreferenceCost(assignments, personId, date.key, targetShift)
+                        : Number.POSITIVE_INFINITY;
+                    assignments[date.key][sourceShift].push(personId);
+                    return { personId, preferenceCost };
+                })
+                .filter((candidate) => Number.isFinite(candidate.preferenceCost))
+                .sort((a, b) => a.preferenceCost - b.preferenceCost);
+            const selected = candidates[0];
+            if (!selected) {
+                break;
+            }
+            assignments[date.key][sourceShift] = assignments[date.key][sourceShift]
+                .filter((id) => id !== selected.personId);
+            assignments[date.key][targetShift].push(selected.personId);
+        }
+    });
+}
+
 function findSupplementAssignment(assignments, personId, seed) {
     const options = [];
     const forcedShift = getForcedShift(personId);
@@ -2260,8 +2310,9 @@ function findSupplementAssignment(assignments, personId, seed) {
             options.push({
                 dateKey: date.key,
                 shiftId,
-                continuityCost: getWorkContinuityCost(assignments, personId, date.key),
+                workPatternCost: getWorkContinuityCost(assignments, personId, date.key),
                 preferenceCost: getCandidatePreferenceCost(assignments, personId, date.key, shiftId),
+                shiftBalanceCost: getProjectedDailyShiftBalanceCost(assignments, date.key, shiftId),
                 totalOnDuty,
                 tieBreaker: (dateIndex + seed + personId.length + shiftId.length) % dates.length,
             });
@@ -2269,9 +2320,17 @@ function findSupplementAssignment(assignments, personId, seed) {
     });
 
     options.sort((a, b) =>
-        (a.continuityCost - b.continuityCost)
-        || (a.preferenceCost - b.preferenceCost)
-        || (a.totalOnDuty - b.totalOnDuty)
+        (
+            a.workPatternCost
+            + a.shiftBalanceCost
+            + (a.preferenceCost * 2)
+            + (a.totalOnDuty * 0.25)
+        ) - (
+            b.workPatternCost
+            + b.shiftBalanceCost
+            + (b.preferenceCost * 2)
+            + (b.totalOnDuty * 0.25)
+        )
         || (a.tieBreaker - b.tieBreaker)
     );
     return options[0] || null;
@@ -2411,11 +2470,16 @@ function getSoftConstraintViolations(assignments) {
                 violations.push(`${person.name} 班次偏好未充分满足`);
             }
         }
-        const isolatedDays = getWorkSegments(assignments, person.id)
+        const workSegments = getWorkSegments(assignments, person.id);
+        const isolatedDays = workSegments
             .filter((segment) => segment.length === 1 && segment.hasRestBefore && segment.restAfter > 0)
             .length;
         if (isolatedDays) {
             violations.push(`${person.name} 存在 ${isolatedDays} 个孤立上班日`);
+        }
+        const sixDaySegments = workSegments.filter((segment) => segment.length === 6).length;
+        if (sixDaySegments) {
+            violations.push(`${person.name} 存在 ${sixDaySegments} 个连续工作 6 天的工作段`);
         }
         getPureRestSegments(assignments, person.id).forEach((segment) => {
             if (segment.length > schedulePolicy.maximumPreferredPureRestDays) {
@@ -2429,6 +2493,17 @@ function getSoftConstraintViolations(assignments) {
                 violations.push(`${person.name} ${boundary}连续纯排休 ${segment.length} 天`);
             }
         });
+    });
+    dates.forEach((date) => {
+        const morning = assignments[date.key]?.morning?.length || 0;
+        const night = assignments[date.key]?.night?.length || 0;
+        const allowedDifference = getAllowedDailyShiftDifference(date.key);
+        const difference = Math.abs(morning - night);
+        if (difference > allowedDifference) {
+            violations.push(
+                `${date.key} 早晚班人数相差 ${difference} 人，超过建议差值 ${allowedDifference} 人`
+            );
+        }
     });
     return violations;
 }
@@ -2462,41 +2537,52 @@ function pickCandidate(assignments, dateKey, shiftId, seed) {
 }
 
 function getWorkContinuityCost(assignments, personId, dateKey) {
-    const index = dates.findIndex((date) => date.key === dateKey);
-    const previousWorking = index > 0 && isWorking(assignments, personId, dates[index - 1].key);
-    const nextWorking = index < dates.length - 1 && isWorking(assignments, personId, dates[index + 1].key);
-    const pureRestBreakCost = getPureRestBreakCost(assignments, personId, index);
-    if (previousWorking && nextWorking) {
-        return -6 + pureRestBreakCost;
-    }
-    if (previousWorking || nextWorking) {
-        return -4 + pureRestBreakCost;
-    }
-    return 8 + pureRestBreakCost;
+    const beforeSegmentScore = getPersonWorkSegmentScore(assignments, personId);
+    const beforePureRestPenalty = getPureRestPenalty(assignments, personId);
+    assignments[dateKey] ||= {};
+    assignments[dateKey].morning ||= [];
+    assignments[dateKey].morning.push(personId);
+    const afterSegmentScore = getPersonWorkSegmentScore(assignments, personId);
+    const afterPureRestPenalty = getPureRestPenalty(assignments, personId);
+    assignments[dateKey].morning.pop();
+    const segmentCost = beforeSegmentScore - afterSegmentScore;
+    const pureRestCost = afterPureRestPenalty - beforePureRestPenalty;
+    const cappedPureRestCost = Math.max(
+        -schedulePolicy.candidatePureRestBenefitCap,
+        Math.min(schedulePolicy.candidatePureRestBenefitCap, pureRestCost),
+    );
+    return segmentCost + cappedPureRestCost;
 }
 
-function getPureRestBreakCost(assignments, personId, dateIndex) {
-    let previousPureRestDays = 0;
-    for (let index = dateIndex - 1; index >= 0; index -= 1) {
-        if (!isPureRestDay(assignments, personId, dates[index].key)) {
-            break;
-        }
-        previousPureRestDays += 1;
+function getAllowedDailyShiftDifference(dateKey) {
+    if (!dateKey) {
+        return 1;
     }
-    let cost = 0;
-    if (previousPureRestDays >= schedulePolicy.maximumPreferredPureRestDays) {
-        cost -= schedulePolicy.internalPureRestPenalty
-            * ((previousPureRestDays - schedulePolicy.maximumPreferredPureRestDays + 1) ** 2);
+    const config = getDateConfig(dateKey);
+    return Math.max(1, Math.abs(config.minimumMorning - config.minimumNight));
+}
+
+function getDailyShiftBalancePenalty(dateKey, morning, night) {
+    const excess = Math.max(
+        0,
+        Math.abs(morning - night) - getAllowedDailyShiftDifference(dateKey),
+    );
+    return schedulePolicy.dailyShiftImbalancePenalty * (excess ** 2);
+}
+
+function getProjectedDailyShiftBalanceCost(assignments, dateKey, shiftId) {
+    if (shiftId !== 'morning' && shiftId !== 'night') {
+        return 0;
     }
-    const restStartedAtPeriodBoundary = previousPureRestDays > 0
-        && dateIndex === previousPureRestDays;
-    if (restStartedAtPeriodBoundary) {
-        cost -= schedulePolicy.boundaryPureRestPenalty * (previousPureRestDays ** 2);
-    }
-    if (previousPureRestDays > 0 && dateIndex === dates.length - 1) {
-        cost -= schedulePolicy.boundaryPureRestPenalty * (previousPureRestDays ** 2);
-    }
-    return cost;
+    const morning = assignments[dateKey]?.morning?.length || 0;
+    const night = assignments[dateKey]?.night?.length || 0;
+    const beforePenalty = getDailyShiftBalancePenalty(dateKey, morning, night);
+    const afterPenalty = getDailyShiftBalancePenalty(
+        dateKey,
+        morning + Number(shiftId === 'morning'),
+        night + Number(shiftId === 'night'),
+    );
+    return afterPenalty - beforePenalty;
 }
 
 function getCandidatePreferenceCost(assignments, personId, dateKey, shiftId) {
@@ -2725,6 +2811,16 @@ function getWorkSegmentScore(segment) {
     return 0;
 }
 
+function getPersonWorkPatternScore(assignments, personId) {
+    return getPersonWorkSegmentScore(assignments, personId)
+        - getPureRestPenalty(assignments, personId);
+}
+
+function getPersonWorkSegmentScore(assignments, personId) {
+    return getWorkSegments(assignments, personId)
+        .reduce((score, segment) => score + getWorkSegmentScore(segment), 0);
+}
+
 function getPersonScheduleScore(assignments, personId, averageLoad) {
     let score = 0;
     const workDays = getWorkDays(assignments, personId);
@@ -2732,10 +2828,7 @@ function getPersonScheduleScore(assignments, personId, averageLoad) {
     const attendanceDays = workDays + targets.paidLeaveDays;
     score -= Math.abs(attendanceDays - targets.targetAttendanceDays) * 5;
 
-    getWorkSegments(assignments, personId).forEach((segment) => {
-        score += getWorkSegmentScore(segment);
-    });
-    score -= getPureRestPenalty(assignments, personId);
+    score += getPersonWorkPatternScore(assignments, personId);
 
     const counts = getPersonShiftCounts(assignments, personId);
     const shiftDifference = Math.abs(counts.morning - counts.night);
@@ -2803,6 +2896,11 @@ function scoreSchedule(assignments) {
         );
         const surplus = Math.max(0, assigned - getDateConfig(date.key).required);
         score -= surplus + (surplus ** 2 * 0.25);
+        score -= getDailyShiftBalancePenalty(
+            date.key,
+            assignments[date.key]?.morning?.length || 0,
+            assignments[date.key]?.night?.length || 0,
+        );
     });
 
     return score - (Math.sqrt(personalStats.variance) * 0.5);
@@ -2901,10 +2999,11 @@ function createArchiveData() {
                     directMorningNightSwitch: 'hard_constraint',
                     internalPureRestPenalty: '-12 * (length - 2)^2',
                     boundaryPureRestPenalty: '-10 * (length - 1)^2',
+                    dailyShiftImbalancePenalty: '-16 * excess_difference^2',
                     attendanceTargetDifferencePerDay: -5,
                 },
                 personalScoreStandardDeviationWeight: 0.5,
-                scoreMode: 'reward-rules-v7-strong-compact-work-segments',
+                scoreMode: 'reward-rules-v10-strong-segments-balanced-shifts',
                 aiSolutionCount: AI_SOLUTION_COUNT,
             },
         },
