@@ -27,7 +27,7 @@ const DEEPSEEK_API_KEY_STORAGE = 'split-word-deepseek-api-key';
 const DEPLOYMENT_CONFIG = window.DAIBAN_HOME_CONFIG || {};
 const CONFIGURED_DEEPSEEK_API_KEY = normalizeApiKey(DEPLOYMENT_CONFIG.DEEPSEEK_API_KEY || '');
 const AI_SOLUTION_COUNT = 3;
-const SCHEDULE_RULES_URL = '排班提示.txt?v=20260801-6';
+const SCHEDULE_RULES_URL = '排班提示.txt?v=20260801-7';
 const MAX_ARCHIVE_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_ARCHIVE_PEOPLE = 300;
 const MAX_ARCHIVE_DATES = 62;
@@ -284,11 +284,18 @@ function normalizeAiJsonResult(value) {
             continue;
         }
         if (result && typeof result === 'object' && !Array.isArray(result)) {
-            if (Array.isArray(result.solutions)) return result;
-            if (result.solutions && typeof result.solutions === 'object') {
-                return { ...result, solutions: [result.solutions] };
+            if (Array.isArray(result.solutions)) {
+                return {
+                    ...result,
+                    solutions: result.solutions.map(normalizeAiSolution),
+                };
             }
-            if (result.assignments) return { solutions: [result] };
+            if (result.solutions && typeof result.solutions === 'object') {
+                return { ...result, solutions: [normalizeAiSolution(result.solutions)] };
+            }
+            if (result.assignments || result.d || result.days) {
+                return { solutions: [normalizeAiSolution(result)] };
+            }
             if (result.schedule?.assignments) {
                 return {
                     solutions: [{
@@ -310,9 +317,42 @@ function normalizeAiJsonResult(value) {
         break;
     }
     if (Array.isArray(result)) {
-        return { solutions: result };
+        return { solutions: result.map(normalizeAiSolution) };
     }
     throw new Error('AI 排班返回的 JSON 缺少 solutions 或 assignments');
+}
+
+function normalizeAiSolution(solution) {
+    if (!solution || typeof solution !== 'object') {
+        return solution;
+    }
+    const compactDays = solution.d ?? solution.days;
+    return {
+        ...solution,
+        name: solution.name ?? solution.n ?? '',
+        summary: solution.summary ?? solution.s ?? '',
+        assignments: solution.assignments
+            ?? (Array.isArray(compactDays) ? decodeCompactAssignments(compactDays) : undefined),
+    };
+}
+
+function encodeCompactAssignments(assignments) {
+    return dates.map((date) => [
+        [...(assignments?.[date.key]?.morning || [])],
+        [...(assignments?.[date.key]?.normal || [])],
+        [...(assignments?.[date.key]?.night || [])],
+    ]);
+}
+
+function decodeCompactAssignments(compactDays) {
+    return Object.fromEntries(dates.map((date, index) => {
+        const day = Array.isArray(compactDays[index]) ? compactDays[index] : [];
+        return [date.key, {
+            morning: Array.isArray(day[0]) ? day[0] : [],
+            normal: Array.isArray(day[1]) ? day[1] : [],
+            night: Array.isArray(day[2]) ? day[2] : [],
+        }];
+    }));
 }
 
 function extractJson(content, stage = 'DeepSeek') {
@@ -1514,91 +1554,70 @@ function createSolutionRecord(assignments, metadata = {}) {
 
 function buildAiScheduleInput(localSolutions, acceptedSolutions = [], repair = null) {
     return {
-        schemaVersion: '1.2.0',
-        task: 'generate_schedule_candidates',
-        requestedSolutionCount: 1,
-        period: {
-            dates: dates.map((date) => ({
-                key: date.key,
-                weekday: date.weekday,
-                required: getDateConfig(date.key).required,
-                minimumMorning: getDateConfig(date.key).minimumMorning,
-                minimumNight: getDateConfig(date.key).minimumNight,
-                appliedStrategyIds: getDateConfig(date.key).appliedStrategyIds,
-            })),
-        },
-        shifts: shifts.map((shift) => ({ ...shift })),
-        people: state.people.map((person) => ({
-            id: person.id,
-            name: person.name,
-            shiftPreference: getShiftPreference(person.id),
-            forcedShift: getForcedShift(person.id) || null,
-            workloadTargets: getPersonWorkloadTargets(person.id),
-        })),
-        preferences: serializeRules(),
-        lockedAssignments: collectLockedAssignments(),
-        policy: {
-            hoursPerDay: schedulePolicy.hoursPerDay,
-            maximumExtraDays: schedulePolicy.maximumExtraDays,
-            maximumConsecutiveDays: schedulePolicy.maximumConsecutiveDays,
-            pureRest: {
-                definition: 'not_working_and_not_vacation',
-                fixedBlockedDaysCountWhenNotWorking: true,
-                preferredMaximumDays: schedulePolicy.maximumPreferredPureRestDays,
-                internalPenalty: `${schedulePolicy.internalPureRestPenalty} * (length - 2)^2`,
-                preferredBoundaryMaximumDays: 1,
-                boundaryPenalty: `${schedulePolicy.boundaryPureRestPenalty} * (length - 1)^2`,
-            },
-            dailyShiftBalance: {
-                allowedDifference: 'max(1, abs(minimumMorning - minimumNight))',
-                excessDifferencePenalty: `${schedulePolicy.dailyShiftImbalancePenalty} * excess^2`,
-                goal: 'prefer_the_less_staffed_shift_when_adding_surplus_attendance',
-            },
-            staffing: {
-                baseTotal: state.staffing.baseTotal,
-                baseMorning: state.staffing.baseMorning,
-                baseNight: state.staffing.baseNight,
-                strategies: state.staffing.strategies.map((strategy) => ({
-                    ...strategy,
-                    dates: [...strategy.dates],
-                    weekdays: [...strategy.weekdays],
-                })),
-            },
-            fairness: {
-                metric: 'standard_deviation_of_personal_schedule_scores',
-                standardDeviationPenaltyWeight: 0.5,
-                goal: 'minimize',
-            },
-        },
-        baselineSolutions: localSolutions.slice(0, 3).map((solution) => ({
-            score: solution.score,
-            personalScoreVariance: solution.personalScoreVariance,
-            personalScores: solution.personalScores,
-            assignments: solution.assignments,
-            softViolations: solution.softViolations,
-        })),
-        acceptedSolutions: acceptedSolutions.map((solution) => ({
-            name: solution.name,
-            assignments: solution.assignments,
-        })),
-        repair: repair ? {
-            violations: repair.violations,
-            assignments: repair.assignments,
+        v: 2,
+        task: 'schedule',
+        dates: dates.map((date) => {
+            const config = getDateConfig(date.key);
+            return [
+                date.key,
+                config.required,
+                config.minimumMorning,
+                config.minimumNight,
+            ];
+        }),
+        people: state.people.map((person) => {
+            const targets = getPersonWorkloadTargets(person.id);
+            return [
+                person.id,
+                getShiftPreference(person.id),
+                getForcedShift(person.id) || '',
+                targets.targetWorkDays,
+                targets.maximumWorkDays,
+                targets.paidLeaveDays,
+            ];
+        }),
+        rules: serializeCompactAiRules(),
+        locked: collectLockedAssignments().map((item) => [
+            item.personId,
+            item.dateKey,
+            item.shiftId,
+        ]),
+        baseline: localSolutions[0] ? {
+            score: localSolutions[0].score,
+            days: encodeCompactAssignments(localSolutions[0].assignments),
         } : null,
-        outputSchema: {
-            solutions: [{
-                name: '方案名称',
-                summary: '方案特点，限 100 字',
-                assignments: {
-                    'YYYY-MM-DD': {
-                        morning: ['personId'],
-                        normal: ['personId'],
-                        night: ['personId'],
-                    },
-                },
-            }],
+        avoid: acceptedSolutions.slice(-1).map((solution) =>
+            encodeCompactAssignments(solution.assignments)
+        ),
+        repair: repair ? {
+            errors: repair.violations.slice(0, 20),
+            days: encodeCompactAssignments(repair.assignments),
+        } : null,
+        format: {
+            root: 'solutions',
+            solution: ['n', 's', 'd'],
+            d: 'one entry per dates item: [morningIds,normalIds,nightIds]',
         },
     };
+}
+
+function serializeCompactAiRules() {
+    const rules = [];
+    Object.entries(state.rules).forEach(([personId, personRules]) => {
+        Object.entries(personRules).forEach(([dateKey, rule]) => {
+            if (!rule.vacation && !rule.allow.size && !rule.block.size) {
+                return;
+            }
+            rules.push([
+                personId,
+                dateKey,
+                [...rule.allow],
+                [...rule.block],
+                Number(Boolean(rule.vacation)),
+            ]);
+        });
+    });
+    return rules;
 }
 
 async function requestAiScheduleSolutions(localSolutions) {
@@ -1608,16 +1627,10 @@ async function requestAiScheduleSolutions(localSolutions) {
     }
     const rewardRules = await loadScheduleRewardRules();
     const baseSystemPrompt = [
-        '你是排班优化专家。请根据输入 JSON 生成一个合法且完整的排班候选。',
-        '必须严格遵守奖励规则中的全部硬性规则，并优化奖励分。',
-        '每个日期必须达到输入 period.dates 中的 required、minimumMorning、minimumNight；这些值已经合并默认人数与全部命中的特殊人力策略。',
-        'people[].forcedShift 非空时，该人员所有上班日只能安排该班次。',
-        '必须综合兼顾每个人的满勤、连续工作段、班次偏好和班次切换，并降低个人排班得分离散程度。',
-        '必须返回 JSON 对象，根字段必须为 solutions，不要返回 Markdown 或解释文字。',
-        'JSON 必须紧凑且语法完整，所有字符串使用英文双引号，禁止尾逗号、注释或省略日期。',
-        '每个日期必须包含 morning、normal、night 三个数组，只能使用输入中的人员 ID。',
-        '如果输入中有 repair，必须逐条修复其中的 violations，不得原样返回。',
-        '如果输入中有 acceptedSolutions，新方案应在满足硬约束的前提下与已有方案有所不同。',
+        '根据输入生成1个完整合法排班。dates每项为[日期,总人数最低,早班最低,晚班最低]；people每项为[ID,偏好,强制班次,目标工作天数,最多工作天数,带薪休假天数]；rules每项为[人员ID,日期,必须上,固定不上,是否休假]。',
+        '严格遵守下方硬约束并优化得分。baseline仅供改进；avoid中的方案不得原样重复；repair.errors必须修复。',
+        '只返回紧凑JSON：{"solutions":[{"n":"名称","s":"100字内摘要","d":[[早班ID数组,常班ID数组,晚班ID数组],...]}]}。',
+        'd必须与dates等长且顺序一致；只用输入ID；禁止Markdown、注释、尾逗号和额外字段。',
         '',
         rewardRules,
     ].join('\n');
@@ -1644,7 +1657,7 @@ async function requestAiScheduleSolutions(localSolutions) {
             rejected += 1;
             repair = {
                 assignments: {},
-                violations: ['上次响应不是完整有效的 JSON，请严格按 outputSchema 返回紧凑 JSON'],
+                violations: ['上次响应不是完整有效的 JSON，请严格按 format 返回紧凑且完整的 d 数组'],
             };
             continue;
         }
@@ -1655,7 +1668,7 @@ async function requestAiScheduleSolutions(localSolutions) {
             }
             repair = {
                 assignments: {},
-                violations: ['返回结果缺少完整 assignments，请为输入中的每个日期生成三个班次数组'],
+                violations: ['返回结果缺少完整 d，请按 dates 顺序为每个日期生成[早班,常班,晚班]三个数组'],
             };
             rejected += 1;
             continue;
