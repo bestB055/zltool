@@ -132,6 +132,8 @@ let strategyDraftWeekdays = new Set();
 let aiAbortController = null;
 let localSolveRunning = false;
 let highlightedSchedulePersonId = '';
+let frozenScheduleHeader = null;
+let frozenHeaderFrame = 0;
 
 function getCycleDates() {
     const today = new Date();
@@ -1179,7 +1181,81 @@ function showAssignmentActionMenu(anchor) {
     menu.style.top = `${top}px`;
 }
 
+function removeFrozenScheduleHeader() {
+    if (frozenHeaderFrame) {
+        cancelAnimationFrame(frozenHeaderFrame);
+        frozenHeaderFrame = 0;
+    }
+    frozenScheduleHeader?.remove();
+    frozenScheduleHeader = null;
+}
+
+function syncFrozenScheduleHeader() {
+    if (!frozenScheduleHeader || state.viewMode !== 'person') return;
+    const table = calendarWrap.querySelector('.schedule-table');
+    const sourceHeader = table?.querySelector('tr');
+    const track = frozenScheduleHeader.querySelector('.frozen-schedule-header-track');
+    if (!table || !sourceHeader || !track) {
+        removeFrozenScheduleHeader();
+        return;
+    }
+
+    const wrapRect = calendarWrap.getBoundingClientRect();
+    const tableRect = table.getBoundingClientRect();
+    const shouldShow = tableRect.top < 0 && tableRect.bottom > 0;
+    frozenScheduleHeader.style.left = `${wrapRect.left}px`;
+    frozenScheduleHeader.style.width = `${wrapRect.width}px`;
+    track.style.transform = `translateX(${-calendarWrap.scrollLeft}px)`;
+    frozenScheduleHeader.classList.toggle('visible', shouldShow);
+}
+
+function scheduleFrozenHeaderSync() {
+    if (frozenHeaderFrame) return;
+    frozenHeaderFrame = requestAnimationFrame(() => {
+        frozenHeaderFrame = 0;
+        syncFrozenScheduleHeader();
+    });
+}
+
+function rebuildFrozenScheduleHeader() {
+    removeFrozenScheduleHeader();
+    if (state.viewMode !== 'person') return;
+    const table = calendarWrap.querySelector('.schedule-table');
+    const sourceHeader = table?.querySelector('tr');
+    if (!table || !sourceHeader) return;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'frozen-schedule-header';
+    overlay.setAttribute('aria-hidden', 'true');
+    const frozenTable = document.createElement('table');
+    frozenTable.className = 'schedule-table frozen-schedule-header-table';
+    const headerClone = sourceHeader.cloneNode(true);
+    const sourceCells = [...sourceHeader.children];
+    [...headerClone.children].forEach((cell, index) => {
+        const width = sourceCells[index].getBoundingClientRect().width;
+        cell.style.width = `${width}px`;
+        cell.style.minWidth = `${width}px`;
+        cell.style.maxWidth = `${width}px`;
+    });
+    frozenTable.style.width = `${table.scrollWidth}px`;
+    frozenTable.appendChild(headerClone);
+
+    const track = document.createElement('div');
+    track.className = 'frozen-schedule-header-track';
+    track.appendChild(frozenTable);
+    overlay.appendChild(track);
+
+    const corner = headerClone.firstElementChild.cloneNode(true);
+    corner.className = 'frozen-schedule-header-corner row-head';
+    corner.style.width = `${sourceCells[0].getBoundingClientRect().width}px`;
+    overlay.appendChild(corner);
+    document.body.appendChild(overlay);
+    frozenScheduleHeader = overlay;
+    syncFrozenScheduleHeader();
+}
+
 function renderCalendar() {
+    removeFrozenScheduleHeader();
     calendarTitle.textContent = state.viewMode === 'shift' ? '日历排班：班次视图' : '日历排班：人员视图';
     const rows = state.viewMode === 'shift'
         ? shifts.map((shift) => ({ id: shift.id, label: `${shift.name}班`, type: 'shift' }))
@@ -1187,7 +1263,7 @@ function renderCalendar() {
 
     const header = `
         <tr>
-            <th class="row-head">${state.viewMode === 'shift' ? '班次' : '人员'}</th>
+            <th class="row-head"></th>
             ${dates.map((date) => `
                 <th>
                     ${renderDateHeader(date)}
@@ -1226,6 +1302,7 @@ function renderCalendar() {
     if (highlightedSchedulePersonId) {
         highlightSchedulePerson(highlightedSchedulePersonId);
     }
+    requestAnimationFrame(rebuildFrozenScheduleHeader);
 }
 
 function renderDateHeader(date) {
@@ -3759,6 +3836,7 @@ strategyList.addEventListener('click', (event) => {
 });
 
 document.getElementById('shiftViewBtn').addEventListener('click', () => {
+    removeFrozenScheduleHeader();
     state.viewMode = 'shift';
     syncViewSwitch();
     renderCalendar();
@@ -3988,6 +4066,7 @@ document.addEventListener('click', (event) => {
 });
 
 window.addEventListener('scroll', (event) => {
+    scheduleFrozenHeaderSync();
     if (event.target instanceof Element && event.target.closest('.manual-menu')) {
         return;
     }
@@ -3999,7 +4078,10 @@ window.addEventListener('resize', () => {
     syncPreferencePlacement();
     closeManualMenu();
     closeAssignmentActionMenu();
+    rebuildFrozenScheduleHeader();
 });
+
+calendarWrap.addEventListener('scroll', scheduleFrozenHeaderSync, { passive: true });
 
 syncStrategyEditorType();
 renderAll();

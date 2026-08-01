@@ -583,6 +583,59 @@ h1 {
     background: #e6f0ff;
 }
 
+.frozen-schedule-header {
+    position: fixed;
+    top: 0;
+    z-index: 9990;
+    overflow: hidden;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    box-shadow: 0 8px 22px rgba(21, 54, 120, 0.14);
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s;
+}
+
+.frozen-schedule-header.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    transition-delay: 0s;
+}
+
+.frozen-schedule-header-track {
+    width: max-content;
+    will-change: transform;
+}
+
+.frozen-schedule-header-table {
+    min-width: 0;
+    table-layout: fixed;
+}
+
+.frozen-schedule-header-table th {
+    position: static;
+    box-sizing: border-box;
+}
+
+.frozen-schedule-header-corner {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 2;
+    box-sizing: border-box;
+    display: flex;
+    align-items: flex-start;
+    padding: 10px;
+    border-right: 1px solid rgba(36, 107, 254, 0.08);
+    border-bottom: 1px solid rgba(36, 107, 254, 0.08);
+    background: #f6f9ff;
+    color: var(--primary-dark);
+    font-size: 0.82rem;
+    font-weight: 900;
+}
+
 .date-head {
     display: grid;
     gap: 2px;
