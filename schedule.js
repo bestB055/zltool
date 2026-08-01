@@ -131,6 +131,7 @@ let strategyDraftDates = new Set();
 let strategyDraftWeekdays = new Set();
 let aiAbortController = null;
 let localSolveRunning = false;
+let highlightedSchedulePersonId = '';
 
 function getCycleDates() {
     const today = new Date();
@@ -1079,6 +1080,27 @@ function closeAssignmentActionMenu() {
     document.querySelector('.assignment-action-menu')?.remove();
 }
 
+function clearSchedulePersonHighlight() {
+    highlightedSchedulePersonId = '';
+    calendarWrap.querySelectorAll('.person-participation-highlight').forEach((cell) => {
+        cell.classList.remove('person-participation-highlight');
+    });
+    calendarWrap.querySelectorAll('[data-lock][aria-pressed="true"]').forEach((button) => {
+        button.setAttribute('aria-pressed', 'false');
+    });
+}
+
+function highlightSchedulePerson(personId) {
+    clearSchedulePersonHighlight();
+    if (state.viewMode !== 'shift') return;
+    highlightedSchedulePersonId = personId;
+    calendarWrap.querySelectorAll('[data-lock][data-person]').forEach((button) => {
+        if (button.dataset.person !== personId) return;
+        button.setAttribute('aria-pressed', 'true');
+        button.closest('td.cell')?.classList.add('person-participation-highlight');
+    });
+}
+
 function deleteAssignment(personId, dateKey, shiftId) {
     state.assignments[dateKey] ||= {};
     state.assignments[dateKey][shiftId] = (state.assignments[dateKey][shiftId] || [])
@@ -1115,6 +1137,7 @@ function showAssignmentActionMenu(anchor) {
             unlockAssignment(personId, dateKey, shiftId);
             showToast('已取消固定，保留当前排班');
             closeAssignmentActionMenu();
+            clearSchedulePersonHighlight();
             refreshPeopleAndCalendar();
         });
     } else {
@@ -1127,6 +1150,7 @@ function showAssignmentActionMenu(anchor) {
             setFixedShift(personId, dateKey, shiftId, 'calendar');
             showToast('已固定该排班');
             closeAssignmentActionMenu();
+            clearSchedulePersonHighlight();
             refreshPeopleAndCalendar();
         });
     }
@@ -1136,6 +1160,7 @@ function showAssignmentActionMenu(anchor) {
         deleteAssignment(personId, dateKey, shiftId);
         showToast(isLocked ? '已删除固定班次' : '已删除该排班');
         closeAssignmentActionMenu();
+        clearSchedulePersonHighlight();
         refreshPeopleAndCalendar();
     });
 
@@ -1182,6 +1207,9 @@ function renderCalendar() {
     calendarWrap.querySelectorAll('[data-lock]').forEach((item) => {
         item.addEventListener('click', (event) => {
             event.stopPropagation();
+            if (state.viewMode === 'shift') {
+                highlightSchedulePerson(item.dataset.person);
+            }
             showAssignmentActionMenu(item);
         });
     });
@@ -1195,6 +1223,9 @@ function renderCalendar() {
             showToast('该固定规则只能在人员固定班次中修改');
         });
     });
+    if (highlightedSchedulePersonId) {
+        highlightSchedulePerson(highlightedSchedulePersonId);
+    }
 }
 
 function renderDateHeader(date) {
@@ -1281,11 +1312,9 @@ function getBlockedPeople(dateKey, shiftId) {
 
 function closeManualMenu() {
     document.querySelector('.manual-menu')?.remove();
-    document.querySelector('.manual-backdrop')?.remove();
-    document.body.classList.remove('manual-menu-open');
 }
 
-function showManualMenu(cell, event) {
+function showManualMenu(cell) {
     closeManualMenu();
     const dateKey = cell.dataset.date;
     const rowId = cell.dataset.rowId;
@@ -1312,12 +1341,6 @@ function showManualMenu(cell, event) {
         }));
     const title = cellType === 'shift' ? '选择排班人员' : '选择分配班次';
 
-    const backdrop = document.createElement('div');
-    backdrop.className = 'manual-backdrop';
-    backdrop.addEventListener('click', closeManualMenu);
-    backdrop.addEventListener('wheel', (event) => event.preventDefault(), { passive: false });
-    backdrop.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false });
-
     const menu = document.createElement('div');
     menu.className = 'manual-menu';
     menu.innerHTML = `
@@ -1331,11 +1354,6 @@ function showManualMenu(cell, event) {
             `).join('')}
         </div>
     `;
-
-    const left = Math.min(event.clientX, window.innerWidth - 280);
-    const top = Math.min(event.clientY, window.innerHeight - 260);
-    menu.style.left = `${Math.max(12, left)}px`;
-    menu.style.top = `${Math.max(12, top)}px`;
 
     menu.querySelectorAll('[data-option-id]').forEach((button) => {
         button.addEventListener('click', () => {
@@ -1351,9 +1369,19 @@ function showManualMenu(cell, event) {
         });
     });
 
-    document.body.classList.add('manual-menu-open');
-    document.body.appendChild(backdrop);
     document.body.appendChild(menu);
+    const cellRect = cell.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    const left = Math.min(
+        Math.max(12, cellRect.left),
+        window.innerWidth - menuRect.width - 12,
+    );
+    const preferredTop = cellRect.bottom + 6;
+    const top = preferredTop + menuRect.height <= window.innerHeight - 12
+        ? preferredTop
+        : Math.max(12, cellRect.top - menuRect.height - 6);
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
 }
 
 function renderSolutions() {
@@ -3737,6 +3765,7 @@ document.getElementById('shiftViewBtn').addEventListener('click', () => {
 });
 
 document.getElementById('personViewBtn').addEventListener('click', () => {
+    clearSchedulePersonHighlight();
     state.viewMode = 'person';
     syncViewSwitch();
     renderCalendar();
@@ -3940,7 +3969,7 @@ calendarWrap.addEventListener('click', (event) => {
     }
 
     event.preventDefault();
-    showManualMenu(cell, event);
+    showManualMenu(cell);
 });
 
 document.addEventListener('click', (event) => {
@@ -3950,13 +3979,25 @@ document.addEventListener('click', (event) => {
     if (!event.target.closest('.assignment-action-menu, [data-lock]')) {
         closeAssignmentActionMenu();
     }
+    if (!event.target.closest('[data-lock][data-person]')) {
+        clearSchedulePersonHighlight();
+    }
     if (!event.target.closest('.person-card')) {
         closeOpenPerson();
     }
 });
 
+window.addEventListener('scroll', (event) => {
+    if (event.target instanceof Element && event.target.closest('.manual-menu')) {
+        return;
+    }
+    closeManualMenu();
+    closeAssignmentActionMenu();
+}, true);
+
 window.addEventListener('resize', () => {
     syncPreferencePlacement();
+    closeManualMenu();
     closeAssignmentActionMenu();
 });
 
