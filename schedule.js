@@ -13,13 +13,16 @@ const schedulePolicy = {
     hoursPerDay: 8,
     maximumExtraDays: 2,
     maximumConsecutiveDays: 6,
+    maximumPreferredPureRestDays: 2,
+    internalPureRestPenalty: 12,
+    boundaryPureRestPenalty: 10,
 };
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 const DEEPSEEK_API_KEY_STORAGE = 'split-word-deepseek-api-key';
 const DEPLOYMENT_CONFIG = window.DAIBAN_HOME_CONFIG || {};
 const CONFIGURED_DEEPSEEK_API_KEY = normalizeApiKey(DEPLOYMENT_CONFIG.DEEPSEEK_API_KEY || '');
 const AI_SOLUTION_COUNT = 3;
-const SCHEDULE_RULES_URL = '排班提示.txt?v=20260801-1';
+const SCHEDULE_RULES_URL = '排班提示.txt?v=20260801-2';
 const MAX_ARCHIVE_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_ARCHIVE_PEOPLE = 300;
 const MAX_ARCHIVE_DATES = 62;
@@ -1511,6 +1514,14 @@ function buildAiScheduleInput(localSolutions, acceptedSolutions = [], repair = n
             hoursPerDay: schedulePolicy.hoursPerDay,
             maximumExtraDays: schedulePolicy.maximumExtraDays,
             maximumConsecutiveDays: schedulePolicy.maximumConsecutiveDays,
+            pureRest: {
+                definition: 'not_working_and_not_vacation',
+                fixedBlockedDaysCountWhenNotWorking: true,
+                preferredMaximumDays: schedulePolicy.maximumPreferredPureRestDays,
+                internalPenalty: `${schedulePolicy.internalPureRestPenalty} * (length - 2)^2`,
+                preferredBoundaryMaximumDays: 1,
+                boundaryPenalty: `${schedulePolicy.boundaryPureRestPenalty} * (length - 1)^2`,
+            },
             staffing: {
                 baseTotal: state.staffing.baseTotal,
                 baseMorning: state.staffing.baseMorning,
@@ -1865,8 +1876,11 @@ function analyzeFixedRuleConflicts() {
         ) {
             blocking.push(`${personName(item.personId)} ${item.dateKey} 晚班后次日固定早班`);
         }
-        if (item.shiftId === 'morning' && hasLockedAssignment(item.personId, getAdjacentDateKey(item.dateKey, -1), 'night')) {
-            blocking.push(`${personName(item.personId)} ${item.dateKey} 早班前一日固定晚班`);
+        if (
+            item.shiftId === 'morning'
+            && hasLockedAssignment(item.personId, getAdjacentDateKey(item.dateKey, 1), 'night')
+        ) {
+            blocking.push(`${personName(item.personId)} ${item.dateKey} 早班后次日固定晚班`);
         }
     });
 
@@ -2292,6 +2306,13 @@ function getHardConstraintViolations(assignments) {
             ) {
                 violations.push(`${person.name} ${dateKey} 晚班后次日被安排早班`);
             }
+            if (
+                assignments[dateKey]?.morning?.includes(person.id)
+                && index < dates.length - 1
+                && assignments[dates[index + 1].key]?.night?.includes(person.id)
+            ) {
+                violations.push(`${person.name} ${dateKey} 早班后次日被安排晚班`);
+            }
         }
     });
     dates.forEach((date) => {
@@ -2353,6 +2374,18 @@ function getSoftConstraintViolations(assignments) {
         if (isolatedDays) {
             violations.push(`${person.name} 存在 ${isolatedDays} 个孤立上班日`);
         }
+        getPureRestSegments(assignments, person.id).forEach((segment) => {
+            if (segment.length > schedulePolicy.maximumPreferredPureRestDays) {
+                violations.push(
+                    `${person.name} ${segment.startDateKey} 至 ${segment.endDateKey} 连续纯排休 ${segment.length} 天`
+                );
+            } else if (segment.length > 1 && (segment.touchesStart || segment.touchesEnd)) {
+                const boundary = segment.touchesStart && segment.touchesEnd
+                    ? '周期首尾'
+                    : segment.touchesStart ? '周期开始' : '周期结束';
+                violations.push(`${person.name} ${boundary}连续纯排休 ${segment.length} 天`);
+            }
+        });
     });
     return violations;
 }
@@ -2389,13 +2422,38 @@ function getWorkContinuityCost(assignments, personId, dateKey) {
     const index = dates.findIndex((date) => date.key === dateKey);
     const previousWorking = index > 0 && isWorking(assignments, personId, dates[index - 1].key);
     const nextWorking = index < dates.length - 1 && isWorking(assignments, personId, dates[index + 1].key);
+    const pureRestBreakCost = getPureRestBreakCost(assignments, personId, index);
     if (previousWorking && nextWorking) {
-        return -6;
+        return -6 + pureRestBreakCost;
     }
     if (previousWorking || nextWorking) {
-        return -4;
+        return -4 + pureRestBreakCost;
     }
-    return 8;
+    return 8 + pureRestBreakCost;
+}
+
+function getPureRestBreakCost(assignments, personId, dateIndex) {
+    let previousPureRestDays = 0;
+    for (let index = dateIndex - 1; index >= 0; index -= 1) {
+        if (!isPureRestDay(assignments, personId, dates[index].key)) {
+            break;
+        }
+        previousPureRestDays += 1;
+    }
+    let cost = 0;
+    if (previousPureRestDays >= schedulePolicy.maximumPreferredPureRestDays) {
+        cost -= schedulePolicy.internalPureRestPenalty
+            * ((previousPureRestDays - schedulePolicy.maximumPreferredPureRestDays + 1) ** 2);
+    }
+    const restStartedAtPeriodBoundary = previousPureRestDays > 0
+        && dateIndex === previousPureRestDays;
+    if (restStartedAtPeriodBoundary) {
+        cost -= schedulePolicy.boundaryPureRestPenalty * (previousPureRestDays ** 2);
+    }
+    if (previousPureRestDays > 0 && dateIndex === dates.length - 1) {
+        cost -= schedulePolicy.boundaryPureRestPenalty * (previousPureRestDays ** 2);
+    }
+    return cost;
 }
 
 function getCandidatePreferenceCost(assignments, personId, dateKey, shiftId) {
@@ -2445,11 +2503,14 @@ function canAssign(assignments, personId, dateKey, shiftId) {
     if (shifts.some((shift) => assignments[dateKey]?.[shift.id]?.includes(personId))) {
         return false;
     }
-    if (shiftId === 'morning' && hadShiftPreviousDay(assignments, personId, dateKey, 'night')) {
-        return false;
-    }
-    if (shiftId === 'night' && hasShiftNextDay(assignments, personId, dateKey, 'morning')) {
-        return false;
+    if (shiftId === 'morning' || shiftId === 'night') {
+        const oppositeShift = shiftId === 'morning' ? 'night' : 'morning';
+        if (
+            hadShiftPreviousDay(assignments, personId, dateKey, oppositeShift)
+            || hasShiftNextDay(assignments, personId, dateKey, oppositeShift)
+        ) {
+            return false;
+        }
     }
     if (wouldExceedSixConsecutive(assignments, personId, dateKey)) {
         return false;
@@ -2491,6 +2552,11 @@ function wouldExceedSixConsecutive(assignments, personId, dateKey) {
 
 function isWorking(assignments, personId, dateKey) {
     return shifts.some((shift) => assignments[dateKey]?.[shift.id]?.includes(personId));
+}
+
+function isPureRestDay(assignments, personId, dateKey) {
+    return !isWorking(assignments, personId, dateKey)
+        && !Boolean(state.rules[personId]?.[dateKey]?.vacation);
 }
 
 function getWorkDays(assignments, personId) {
@@ -2548,6 +2614,57 @@ function getWorkSegments(assignments, personId) {
     return segments;
 }
 
+function getPureRestSegments(assignments, personId) {
+    const segments = [];
+    let startIndex = -1;
+    dates.forEach((date, index) => {
+        if (isPureRestDay(assignments, personId, date.key)) {
+            if (startIndex < 0) {
+                startIndex = index;
+            }
+            return;
+        }
+        if (startIndex >= 0) {
+            segments.push(createPureRestSegment(startIndex, index - 1));
+            startIndex = -1;
+        }
+    });
+    if (startIndex >= 0) {
+        segments.push(createPureRestSegment(startIndex, dates.length - 1));
+    }
+    return segments;
+}
+
+function createPureRestSegment(startIndex, endIndex) {
+    return {
+        startDateKey: dates[startIndex].key,
+        endDateKey: dates[endIndex].key,
+        length: endIndex - startIndex + 1,
+        touchesStart: startIndex === 0,
+        touchesEnd: endIndex === dates.length - 1,
+    };
+}
+
+function getPureRestPenalty(assignments, personId) {
+    return getPureRestSegments(assignments, personId).reduce((penalty, segment) => {
+        let segmentPenalty = 0;
+        if (segment.length > schedulePolicy.maximumPreferredPureRestDays) {
+            const excess = segment.length - schedulePolicy.maximumPreferredPureRestDays;
+            segmentPenalty += schedulePolicy.internalPureRestPenalty * (excess ** 2);
+        }
+        if (segment.length > 1) {
+            const boundaryExcess = segment.length - 1;
+            if (segment.touchesStart) {
+                segmentPenalty += schedulePolicy.boundaryPureRestPenalty * (boundaryExcess ** 2);
+            }
+            if (segment.touchesEnd) {
+                segmentPenalty += schedulePolicy.boundaryPureRestPenalty * (boundaryExcess ** 2);
+            }
+        }
+        return penalty + segmentPenalty;
+    }, 0);
+}
+
 function getAssignedShiftId(assignments, personId, dateKey) {
     return shifts.find((shift) => assignments[dateKey]?.[shift.id]?.includes(personId))?.id || '';
 }
@@ -2564,6 +2681,7 @@ function getPersonScheduleScore(assignments, personId, averageLoad) {
         else if (segment.length === 1 && segment.hasRestBefore && segment.restAfter > 0) score -= 8;
         else if (segment.length === 6) score -= 8;
     });
+    score -= getPureRestPenalty(assignments, personId);
 
     const counts = getPersonShiftCounts(assignments, personId);
     const shiftDifference = Math.abs(counts.morning - counts.night);
@@ -2726,11 +2844,13 @@ function createArchiveData() {
                     preferredShift: 2,
                     oppositeShift: -4,
                     sameAdjacentShift: 1,
-                    directMorningNightSwitch: -2,
+                    directMorningNightSwitch: 'hard_constraint',
+                    internalPureRestPenalty: '-12 * (length - 2)^2',
+                    boundaryPureRestPenalty: '-10 * (length - 1)^2',
                     attendanceTargetDifferencePerDay: -5,
                 },
                 personalScoreStandardDeviationWeight: 0.5,
-                scoreMode: 'reward-rules-v5-compact-work-segments',
+                scoreMode: 'reward-rules-v6-symmetric-shift-rest-boundaries',
                 aiSolutionCount: AI_SOLUTION_COUNT,
             },
         },
