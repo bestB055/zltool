@@ -161,35 +161,35 @@ h1 {
     color: var(--primary-dark);
 }
 
+.hero-actions {
+    display: grid;
+    justify-items: start;
+    gap: 7px;
+}
+
 .ai-model-option {
     display: inline-flex;
     align-items: center;
-    min-height: 40px;
-    gap: 8px;
-    padding: 0 13px;
-    border: 1px solid rgba(36, 107, 254, 0.16);
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.68);
-    color: var(--primary-dark);
-    font-weight: 800;
+    gap: 6px;
+    min-height: 20px;
+    padding-left: 2px;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 600;
     cursor: pointer;
     user-select: none;
 }
 
 .ai-model-option input {
-    width: 18px;
-    height: 18px;
+    width: 14px;
+    height: 14px;
+    margin: 0;
     accent-color: var(--primary);
     cursor: pointer;
 }
 
-.ai-model-option:has(input:checked) {
-    border-color: var(--primary);
-    background: rgba(36, 107, 254, 0.1);
-}
-
 .ai-model-option:has(input:focus-visible) {
-    outline: 3px solid rgba(36, 107, 254, 0.24);
+    outline: 2px solid rgba(36, 107, 254, 0.24);
     outline-offset: 2px;
 }
 
