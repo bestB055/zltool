@@ -179,7 +179,7 @@ h1 {
 
 .staffing-grid {
     display: grid;
-    grid-template-columns: minmax(220px, 0.75fr) minmax(0, 2fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 18px;
 }
 
@@ -1492,7 +1492,6 @@ h1 {
         grid-template-columns: 1fr;
     }
 
-    .staffing-grid,
     .strategy-editor {
         grid-template-columns: 1fr 1fr;
     }
