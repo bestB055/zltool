@@ -84,24 +84,6 @@
             padding: 26px;
         }
 
-        .page-title {
-            margin-bottom: 24px;
-            text-align: center;
-        }
-
-        .page-title h1 {
-            margin-bottom: 8px;
-            font-size: clamp(2.2rem, 6vw, 4rem);
-            line-height: 1.05;
-            letter-spacing: 0;
-        }
-
-        .page-subtitle {
-            color: var(--muted);
-            font-size: 1rem;
-            line-height: 1.6;
-        }
-
         .duty-note {
             position: relative;
             width: min(790px, calc(100% - 28px));
@@ -160,25 +142,6 @@
             backdrop-filter: blur(1px);
         }
 
-        .duty-note-folds {
-            position: absolute;
-            z-index: 2;
-            right: -13px;
-            bottom: -9px;
-            width: 150px;
-            height: 56px;
-            opacity: 0.5;
-            transform: skewX(-18deg);
-            pointer-events: none;
-            background:
-                linear-gradient(145deg, transparent 0 37%, rgba(105, 112, 122, 0.2) 37.5% 38.2%, transparent 38.8%),
-                linear-gradient(145deg, transparent 0 47%, rgba(105, 112, 122, 0.15) 47.5% 48.2%, transparent 48.8%),
-                linear-gradient(145deg, transparent 0 57%, rgba(105, 112, 122, 0.12) 57.5% 58.2%, transparent 58.8%),
-                repeating-linear-gradient(90deg, transparent 0 13px, rgba(105, 112, 122, 0.12) 13px 14px);
-            border-top: 1px solid rgba(105, 112, 122, 0.18);
-            border-right: 1px solid rgba(105, 112, 122, 0.14);
-        }
-
         .duty-note-title {
             margin-bottom: 9px;
             color: #3f3d39;
@@ -190,6 +153,7 @@
         .duty-note-list {
             display: grid;
             gap: 3px;
+            padding-bottom: 18px;
             color: #55514b;
             font-size: 0.86rem;
             line-height: 1.5;
@@ -198,6 +162,17 @@
 
         .duty-note-list li {
             text-wrap: pretty;
+        }
+
+        .duty-note-date {
+            position: absolute;
+            right: 34px;
+            bottom: 15px;
+            color: rgba(91, 83, 70, 0.62);
+            font-family: Georgia, "Times New Roman", serif;
+            font-size: 0.82rem;
+            font-style: italic;
+            letter-spacing: 0.04em;
         }
 
         .section-header {
@@ -548,12 +523,6 @@
                 height: 43px;
             }
 
-            .duty-note-folds {
-                right: -5px;
-                width: 100px;
-                height: 44px;
-            }
-
             .duty-note-list {
                 font-size: 0.84rem;
             }
@@ -585,10 +554,6 @@
 <body>
     <main class="page">
         <button class="recent-updates-button" type="button" title="查看最近更新说明">最近更新</button>
-        <header class="page-title">
-            <h1>带班首页</h1>
-            <p class="page-subtitle" id="todaySubtitle">今天是</p>
-        </header>
 
         <aside class="duty-note" aria-labelledby="dutyNoteTitle">
             <span class="duty-note-tape" aria-hidden="true"></span>
@@ -603,8 +568,8 @@
                     <li>⑥直播风险监测群记得处理。</li>
                     <li>⑦提示类内容记得贴到日常带班文档。</li>
                 </ol>
+                <p class="duty-note-date" id="todaySubtitle">今天是</p>
             </div>
-            <span class="duty-note-folds" aria-hidden="true"></span>
         </aside>
 
         <section class="section quick-section" id="quickEntries">
